@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"GinProject/conf"
+	"ginproject/conf"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/exp/slog"
@@ -45,7 +45,7 @@ func InitLogger(cfg *conf.AppConfig) error {
 	h := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
 		Level: level,
 	}).WithAttrs([]slog.Attr{
-		slog.String("service", "GinProject"),
+		slog.String("service", "ginproject"),
 	})
 
 	logger := slog.New(h)

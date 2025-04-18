@@ -1,8 +1,8 @@
 package logic
 
 import (
-	"GinProject/entity"
 	"fmt"
+	"ginproject/entity"
 )
 
 type HelloLogic struct{}

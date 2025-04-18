@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"GinProject/conf"
-	"GinProject/middleware"
-	"GinProject/service"
+	"ginproject/conf"
+	"ginproject/middleware"
+	"ginproject/service"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/exp/slog"
@@ -42,7 +42,12 @@ func main() {
 }
 
 func registerRoutes(r *gin.Engine) {
-	// 初始化服务并注册路由
+	// 初始化服务
 	helloService := service.NewHelloService()
-	helloService.RegisterRoutes(r)
+
+	// 添加新的时间服务路由
+	r.GET("/current_time", service.NewCurrentTimeService().GetCurrentTimeService)
+
+	// 注册 /say/hello 路由
+	r.POST("/say/hello", helloService.HelloHandler)
 }

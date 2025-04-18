@@ -1,4 +1,4 @@
-module GinProject
+module ginproject
 
 go 1.23.7
 

@@ -1,8 +1,8 @@
 package service
 
 import (
-	"GinProject/entity"
-	"GinProject/logic"
+	"ginproject/entity"
+	"ginproject/logic"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/exp/slog"
@@ -18,11 +18,7 @@ func NewHelloService() *HelloService {
 	}
 }
 
-func (s *HelloService) RegisterRoutes(r *gin.Engine) {
-	r.POST("/say/hello", s.helloHandler)
-}
-
-func (s *HelloService) helloHandler(c *gin.Context) {
+func (s *HelloService) HelloHandler(c *gin.Context) {
 	var req entity.UsernameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		slog.ErrorCtx(c.Request.Context(), "请求参数绑定失败", "error", err)
