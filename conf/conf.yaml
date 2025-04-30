@@ -1,0 +1,17 @@
+server:
+  host: 127.0.0.1
+  port: 8080
+log:
+  path: ./logs/app.log
+  level: info
+
+# 数据库配置示例
+# database:
+#   host: "localhost"
+#   port: 3306
+#   username: "root"
+#   password: "password"
+#   dbname: "mydatabase"
+#   charset: "utf8mb4"
+#   maxidleconns: 10
+#   maxopenconns: 100 

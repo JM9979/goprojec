@@ -1,44 +1,36 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
-	"ginproject/conf"
-	"ginproject/middleware"
+	"ginproject/middleware/log"
+	"ginproject/repo"
 	"ginproject/service"
 
 	"github.com/gin-gonic/gin"
-	"golang.org/x/exp/slog"
+	"go.uber.org/zap"
 )
 
+var router *gin.Engine
+
+func init() {
+	router = gin.New()
+	router.Use(gin.Recovery())
+}
+
 func main() {
-	cfg, err := conf.InitConfig()
-	if err != nil {
-		slog.Error("配置初始化失败", "error", err)
+	// 全局初始化
+	if err := repo.Global_init(); err != nil {
+		log.Error("全局初始化失败", zap.Error(err))
 		os.Exit(1)
 	}
-
-	// 初始化日志
-	if err := middleware.InitLogger(cfg); err != nil {
-		slog.Error("日志初始化失败", "error", err)
-		os.Exit(1)
-	}
-
-	router := gin.New()
-	router.Use(
-		middleware.GinLogger(),
-		middleware.GinRecovery(true),
-	)
 
 	// 注册路由
 	registerRoutes(router)
 
-	slog.Info("服务启动", "port", cfg.Port)
-	if err := router.Run(fmt.Sprintf(":%d", cfg.Port)); err != nil {
-		slog.Error("服务启动失败", "error", err)
-		os.Exit(1)
-	}
+	// 创建HTTP服务器并启动
+	srv := service.CreateServer(router)
+	srv.Start()
 }
 
 func registerRoutes(r *gin.Engine) {
