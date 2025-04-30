@@ -129,29 +129,29 @@ func Error(msg string, fields ...zap.Field) {
 	}
 }
 
-// Context相关的日志方法
-func DebugContext(ctx context.Context, msg string, fields ...zap.Field) {
+// WithContext相关的日志方法
+func DebugWithContext(ctx context.Context, msg string, fields ...zap.Field) {
 	if globalLogger != nil {
 		fields = appendTraceFields(ctx, fields...)
 		globalLogger.Debug(msg, fields...)
 	}
 }
 
-func InfoContext(ctx context.Context, msg string, fields ...zap.Field) {
+func InfoWithContext(ctx context.Context, msg string, fields ...zap.Field) {
 	if globalLogger != nil {
 		fields = appendTraceFields(ctx, fields...)
 		globalLogger.Info(msg, fields...)
 	}
 }
 
-func WarnContext(ctx context.Context, msg string, fields ...zap.Field) {
+func WarnWithContext(ctx context.Context, msg string, fields ...zap.Field) {
 	if globalLogger != nil {
 		fields = appendTraceFields(ctx, fields...)
 		globalLogger.Warn(msg, fields...)
 	}
 }
 
-func ErrorContext(ctx context.Context, msg string, fields ...zap.Field) {
+func ErrorWithContext(ctx context.Context, msg string, fields ...zap.Field) {
 	if globalLogger != nil {
 		fields = appendTraceFields(ctx, fields...)
 		globalLogger.Error(msg, fields...)
@@ -184,7 +184,7 @@ func Errorf(format string, args ...interface{}) {
 }
 
 // 带上下文的格式化日志方法
-func DebugContextf(ctx context.Context, format string, args ...interface{}) {
+func DebugWithContextf(ctx context.Context, format string, args ...interface{}) {
 	if globalLogger != nil {
 		msg := fmt.Sprintf(format, args...)
 		fields := appendTraceFields(ctx)
@@ -192,7 +192,7 @@ func DebugContextf(ctx context.Context, format string, args ...interface{}) {
 	}
 }
 
-func InfoContextf(ctx context.Context, format string, args ...interface{}) {
+func InfoWithContextf(ctx context.Context, format string, args ...interface{}) {
 	if globalLogger != nil {
 		msg := fmt.Sprintf(format, args...)
 		fields := appendTraceFields(ctx)
@@ -200,7 +200,7 @@ func InfoContextf(ctx context.Context, format string, args ...interface{}) {
 	}
 }
 
-func WarnContextf(ctx context.Context, format string, args ...interface{}) {
+func WarnWithContextf(ctx context.Context, format string, args ...interface{}) {
 	if globalLogger != nil {
 		msg := fmt.Sprintf(format, args...)
 		fields := appendTraceFields(ctx)
@@ -208,7 +208,7 @@ func WarnContextf(ctx context.Context, format string, args ...interface{}) {
 	}
 }
 
-func ErrorContextf(ctx context.Context, format string, args ...interface{}) {
+func ErrorWithContextf(ctx context.Context, format string, args ...interface{}) {
 	if globalLogger != nil {
 		msg := fmt.Sprintf(format, args...)
 		fields := appendTraceFields(ctx)

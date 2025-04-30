@@ -37,7 +37,7 @@ func (s *HelloService) HelloHandler(c *gin.Context) {
 
 	var req entity.UsernameRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		log.ErrorContextf(ctx, "请求参数绑定失败: %v", err)
+		log.ErrorWithContextf(ctx, "请求参数绑定失败: %v", err)
 		c.JSON(400, gin.H{
 			"code":     400,
 			"message":  "无效的请求参数",
@@ -46,13 +46,13 @@ func (s *HelloService) HelloHandler(c *gin.Context) {
 		return
 	}
 
-	log.InfoContextf(ctx, "请求参数: %v", req)
+	log.InfoWithContextf(ctx, "请求参数: %v", req)
 	response := s.logic.SayHello(req)
 
 	// 在响应中添加traceID
 	response.TraceID = traceID
 
-	log.InfoContextf(ctx, "响应结果: %v", response)
+	log.InfoWithContextf(ctx, "响应结果: %v", response)
 	c.JSON(200, response)
 }
 
