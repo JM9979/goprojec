@@ -40,7 +40,7 @@ mkdir -p "$BIN_DIR"
 # 构建项目
 echo "🛠  Building $EXEC_NAME from $BUILD_DIR..."
 # 构建项目后立即设置执行权限
-go build -o "$BIN_DIR/$EXEC_NAME" "./$BUILD_DIR" && chmod +x "$BIN_DIR/$EXEC_NAME"
+go build -buildvcs=false -o "$BIN_DIR/$EXEC_NAME" "./$BUILD_DIR" && chmod +x "$BIN_DIR/$EXEC_NAME"
 
 # 检查构建结果
 if [ $? -ne 0 ]; then
