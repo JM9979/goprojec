@@ -4,10 +4,18 @@ import (
 	"context"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
+)
+
+const (
+	// TraceIDHeader HTTP请求头中存储trace ID的键
+	TraceIDHeader = "X-Trace-ID"
+	// SpanIDHeader HTTP请求头中存储span ID的键
+	SpanIDHeader = "X-Span-ID"
 )
 
 var (
@@ -44,6 +52,18 @@ func NewContext(ctx context.Context, operationName string) context.Context {
 // WithNewSpan 在现有的trace中创建一个新的span
 func WithNewSpan(ctx context.Context, operationName string) context.Context {
 	ctx, _ = tracer.Start(ctx, operationName)
+	return ctx
+}
+
+// WithAttributes 在现有的trace中创建一个带有属性的新span
+func WithAttributes(ctx context.Context, operationName string, attrs ...attribute.KeyValue) context.Context {
+	ctx, _ = tracer.Start(ctx, operationName, trace.WithAttributes(attrs...))
+	return ctx
+}
+
+// WithSpanKind 在现有的trace中创建一个指定类型的新span
+func WithSpanKind(ctx context.Context, operationName string, kind trace.SpanKind) context.Context {
+	ctx, _ = tracer.Start(ctx, operationName, trace.WithSpanKind(kind))
 	return ctx
 }
 

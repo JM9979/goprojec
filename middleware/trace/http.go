@@ -5,13 +5,6 @@ import (
 	"net/http"
 )
 
-const (
-	// TraceIDHeader HTTP请求头中存储trace ID的键
-	TraceIDHeader = "X-Trace-ID"
-	// SpanIDHeader HTTP请求头中存储span ID的键
-	SpanIDHeader = "X-Span-ID"
-)
-
 // HTTPMiddleware 是一个HTTP中间件，用于处理传入请求的trace
 func HTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
