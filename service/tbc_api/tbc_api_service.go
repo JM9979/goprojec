@@ -8,13 +8,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// TbcApiService TBC API服务
 type TbcApiService struct {
 }
 
+// NewTbcApiService 创建TbcApiService实例
 func NewTbcApiService() *TbcApiService {
 	return &TbcApiService{}
 }
 
+// HealthCheck 健康检查
 func (s *TbcApiService) HealthCheck(c *gin.Context) {
 	ctx := c.Request.Context()
 	log.InfoWithContext(ctx, "HealthCheck")
