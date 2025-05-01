@@ -3,6 +3,8 @@ package tbcapi
 import (
 	"net/http"
 
+	"ginproject/middleware/log"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,13 +15,12 @@ func NewTbcApiService() *TbcApiService {
 	return &TbcApiService{}
 }
 
-
 func (s *TbcApiService) HealthCheck(c *gin.Context) {
+	
+	log.InfoWithContext(c.Request.Context(), "HealthCheck")
 	c.JSON(http.StatusOK, gin.H{
 		"code":    200,
 		"message": "Turing API is running.",
 		"data":    gin.H{},
 	})
 }
-
-

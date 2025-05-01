@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"ginproject/middleware/log"
+	"ginproject/middleware/trace"
 	"ginproject/repo"
 	"ginproject/service"
 	tbcapi "ginproject/service/tbc_api"
@@ -17,6 +18,8 @@ var router *gin.Engine
 func init() {
 	router = gin.New()
 	router.Use(gin.Recovery())
+	// 添加trace中间件
+	router.Use(trace.GinMiddleware())
 }
 
 func main() {
