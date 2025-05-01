@@ -1,0 +1,72 @@
+package trace
+
+import (
+	"context"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	"go.opentelemetry.io/otel/trace"
+)
+
+var (
+	// 全局tracer实例
+	tracer = otel.Tracer("ginproject.service")
+)
+
+func init() {
+	// 创建资源配置
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String("ginproject"),
+	)
+
+	// 创建TracerProvider
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
+		sdktrace.WithSampler(sdktrace.AlwaysSample()),
+	)
+
+	// 设置全局TracerProvider
+	otel.SetTracerProvider(tp)
+
+	// 更新tracer
+	tracer = otel.Tracer("ginproject.service")
+}
+
+// NewContext 创建一个包含新trace和span的context
+func NewContext(ctx context.Context, operationName string) context.Context {
+	ctx, _ = tracer.Start(ctx, operationName)
+	return ctx
+}
+
+// WithNewSpan 在现有的trace中创建一个新的span
+func WithNewSpan(ctx context.Context, operationName string) context.Context {
+	ctx, _ = tracer.Start(ctx, operationName)
+	return ctx
+}
+
+// ExtractIDs 从context中提取trace ID和span ID
+func ExtractIDs(ctx context.Context) (string, string) {
+	span := trace.SpanFromContext(ctx)
+	return span.SpanContext().TraceID().String(), span.SpanContext().SpanID().String()
+}
+
+// CurrentSpan 从context中获取当前span
+func CurrentSpan(ctx context.Context) trace.Span {
+	return trace.SpanFromContext(ctx)
+}
+
+// SetTracer 设置自定义的Tracer
+func SetTracer(customTracer trace.Tracer) {
+	if customTracer != nil {
+		tracer = customTracer
+	}
+}
+
+// EndSpan 结束context中的span
+func EndSpan(ctx context.Context) {
+	span := trace.SpanFromContext(ctx)
+	span.End()
+}
