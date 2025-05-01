@@ -7,6 +7,7 @@ type TBCConfig struct {
 }
 
 type ServerConfig struct {
+	Name string `yaml:"name"`
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
 }

@@ -20,14 +20,19 @@ const (
 
 var (
 	// 全局tracer实例
-	tracer = otel.Tracer("ginproject.service")
+	tracer trace.Tracer
+	// 服务名称
+	serviceName string
 )
 
-func init() {
+// InitTracer 使用服务名初始化追踪器
+func InitTracer(name string) {
+	serviceName = name
+
 	// 创建资源配置
 	res := resource.NewWithAttributes(
 		semconv.SchemaURL,
-		semconv.ServiceNameKey.String("ginproject"),
+		semconv.ServiceNameKey.String(serviceName),
 	)
 
 	// 创建TracerProvider
@@ -40,7 +45,7 @@ func init() {
 	otel.SetTracerProvider(tp)
 
 	// 更新tracer
-	tracer = otel.Tracer("ginproject.service")
+	tracer = otel.Tracer(serviceName + ".service")
 }
 
 // NewContext 创建一个包含新trace和span的context

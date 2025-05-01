@@ -26,7 +26,7 @@ const (
 )
 
 // InitLogger 使用AppConfig初始化日志
-func InitLogger(cfg *config.LogConfig) error {
+func InitLogger(cfg *config.LogConfig, serverName string) error {
 	if cfg.Path != "" {
 		if err := os.MkdirAll(filepath.Dir(cfg.Path), 0755); err != nil {
 			return fmt.Errorf("创建日志目录失败: %w", err)
@@ -82,7 +82,7 @@ func InitLogger(cfg *config.LogConfig) error {
 	logger := zap.New(core,
 		zap.AddCaller(),
 		zap.AddCallerSkip(1),
-		zap.Fields(zap.String("service", "ginproject")),
+		zap.Fields(zap.String("service", serverName)),
 	)
 
 	globalLogger = logger

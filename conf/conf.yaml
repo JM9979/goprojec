@@ -1,8 +1,9 @@
 server:
+  name: ginproject
   host: 127.0.0.1
   port: 8080
 log:
-  path: ./logs/app.log
+  path: ./logs/${server.name}.log
   level: info
 
 # 数据库配置示例
