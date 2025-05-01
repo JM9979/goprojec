@@ -16,14 +16,27 @@ func Global_init() error {
 		return fmt.Errorf("配置初始化失败: %w", err)
 	}
 
-	// 启用配置自动重载
-	conf.EnableAutoReload(0) // 使用默认间隔时间
+	// 启用配置文件监视
+	err := conf.EnableWatch(func() {
+		// 配置更改时的回调函数
+		log.Info("检测到配置文件变更，已重新加载")
+	})
+	if err != nil {
+		return fmt.Errorf("启用配置监视失败: %w", err)
+	}
 
 	// 获取服务名称
-	serverName := conf.GetServerConfig().Name
+	serverName := conf.GetServerName()
+
+	// 获取并解析日志配置
+	logConfig := conf.GetLogConfig()
+
+	// 解析日志路径中的变量
+	// 例如: ./logs/${server.name}.log 会被解析为 ./logs/ginproject.log
+	logConfig.Path = conf.ParseLogPath()
 
 	// 初始化日志
-	if err := log.InitLogger(conf.GetLogConfig(), serverName); err != nil {
+	if err := log.InitLogger(logConfig, serverName); err != nil {
 		return fmt.Errorf("日志初始化失败: %w", err)
 	}
 
