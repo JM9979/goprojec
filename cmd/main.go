@@ -6,6 +6,7 @@ import (
 	"ginproject/middleware/log"
 	"ginproject/repo"
 	"ginproject/service"
+	tbcapi "ginproject/service/tbc_api"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -34,12 +35,9 @@ func main() {
 }
 
 func registerRoutes(r *gin.Engine) {
-	// 初始化服务
-	helloService := service.NewHelloService()
+	// 创建API路由组，设置前缀
+	apiGroup := r.Group("/v1/tbc/main")
 
-	// 添加新的时间服务路由
-	r.GET("/current_time", service.NewCurrentTimeService().GetCurrentTimeService)
-
-	// 注册 /say/hello 路由
-	r.POST("/say/hello", helloService.HelloHandler)
+	// 添加健康检查端点
+	apiGroup.GET("/health", tbcapi.NewTbcApiService().HealthCheck)
 }
