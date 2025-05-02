@@ -1,8 +1,9 @@
 package nft_utxo_set_dao
 
 import (
-	"ginproject/repo/db"
+	"context"
 	"ginproject/entity/dbtable"
+	"ginproject/repo/db"
 
 	"gorm.io/gorm"
 )
@@ -85,4 +86,25 @@ func (dao *NftUtxoSetDAO) GetNftUtxosWithPagination(page, pageSize int) ([]*dbta
 	}
 
 	return utxos, total, nil
+}
+
+// GetPoolNftInfoByContractId 根据合约ID获取NFT池交易ID和余额
+// 用于TBC20池NFT信息查询
+func (dao *NftUtxoSetDAO) GetPoolNftInfoByContractId(ctx context.Context, ftContractId string) (string, uint64, error) {
+	var result struct {
+		NftUtxoId      string `gorm:"column:nft_utxo_id"`
+		NftCodeBalance uint64 `gorm:"column:nft_code_balance"`
+	}
+
+	err := dao.db.WithContext(ctx).
+		Table("TBC20721.nft_utxo_set").
+		Select("nft_utxo_id, nft_code_balance").
+		Where("nft_contract_id = ?", ftContractId).
+		First(&result).Error
+
+	if err != nil {
+		return "", 0, err
+	}
+
+	return result.NftUtxoId, result.NftCodeBalance, nil
 }

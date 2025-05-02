@@ -2,6 +2,7 @@ package ft
 
 import (
 	"net/http"
+	"strings"
 
 	"ginproject/entity/constant"
 	"ginproject/entity/ft"
@@ -147,4 +148,50 @@ func (s *FtService) GetMultiFtBalanceByAddress(c *gin.Context) {
 
 	// 返回成功响应
 	c.JSON(http.StatusOK, responseList)
+}
+
+// GetPoolNFTInfoByContractId 根据合约ID获取NFT池信息
+// 路由: GET /v1/tbc/main/ft/pool/nft/info/contract/id/:ft_contract_id
+func (s *FtService) GetPoolNFTInfoByContractId(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.TBC20PoolNFTInfoRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取NFT池信息请求: 合约ID=%s", req.FtContractId)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetNFTPoolInfoByContractId(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理NFT池信息查询失败: %v", err)
+
+		// 判断是否是未找到NFT池的错误
+		if err.Error() == "No NFT pool info found." {
+			// 返回特定的错误格式
+			c.JSON(http.StatusOK, ft.ErrorResponse{
+				Error: "No pool NFT found.",
+			})
+			return
+		} else if strings.HasPrefix(err.Error(), "Decode pool NFT failed") {
+			// 返回解码失败的错误
+			c.JSON(http.StatusOK, ft.ErrorResponse{
+				Error: "Decode pool NFT failed.",
+			})
+			return
+		}
+
+		// 其他服务器错误
+		c.JSON(http.StatusOK, ft.ErrorResponse{
+			Error: err.Error(),
+		})
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
 }

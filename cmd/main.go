@@ -51,4 +51,5 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/ft/utxo/address/:address/contract/:contract_id", ftService.GetFtUtxoByAddress)
 	apiGroup.GET("/ft/info/contract/id/:contract_id", ftService.GetFtInfoByContractId)
 	apiGroup.POST("/ft/balance/address/:address/contract/ids", ftService.GetMultiFtBalanceByAddress)
+	apiGroup.GET("/ft/pool/nft/info/contract/id/:ft_contract_id", ftService.GetPoolNFTInfoByContractId)
 }
