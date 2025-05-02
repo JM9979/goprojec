@@ -15,4 +15,10 @@ db:
   database: "TBC20721"
   charset: "utf8mb4"
   maxidleconns: 10
-  maxopenconns: 100 
+  maxopenconns: 100
+
+# RPC认证配置
+rpc:
+  url: "http://develope.tbcdev.xyz:8332"
+  user: "tbcuser"
+  password: "randompasswd" 

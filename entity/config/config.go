@@ -4,6 +4,7 @@ type TBCConfig struct {
 	Server ServerConfig `yaml:"server"`
 	Log    LogConfig    `yaml:"log"`
 	DB     DBConfig     `yaml:"db"`
+	RPC    RPCConfig    `yaml:"rpc"`
 }
 
 type ServerConfig struct {
@@ -26,4 +27,11 @@ type DBConfig struct {
 	Charset      string `yaml:"charset"`
 	MaxIdleConns int    `yaml:"maxidleconns"`
 	MaxOpenConns int    `yaml:"maxopenconns"`
+}
+
+// RPCConfig RPC客户端配置
+type RPCConfig struct {
+	URL      string `yaml:"url"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
 }

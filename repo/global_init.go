@@ -7,6 +7,7 @@ import (
 	"ginproject/middleware/log"
 	"ginproject/middleware/trace"
 	"ginproject/repo/db"
+	"ginproject/repo/rpc"
 )
 
 // Global_init 全局初始化
@@ -47,6 +48,11 @@ func Global_init() error {
 	// 初始化数据库连接
 	if err := db.Init(); err != nil {
 		return fmt.Errorf("数据库初始化失败: %w", err)
+	}
+
+	// 初始化RPC客户端
+	if err := rpc.Init(); err != nil {
+		return fmt.Errorf("RPC客户端初始化失败: %w", err)
 	}
 
 	// 记录初始化成功日志
