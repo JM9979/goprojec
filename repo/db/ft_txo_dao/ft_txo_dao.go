@@ -2,8 +2,6 @@ package ft_txo_dao
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"ginproject/entity/dbtable"
 	"ginproject/repo/db"
@@ -23,102 +21,97 @@ func NewFtTxoDAO() *FtTxoDAO {
 	}
 }
 
-// Create 创建新的交易输出记录
-func (d *FtTxoDAO) Create(ctx context.Context, txo *dbtable.FtTxoSet) error {
-	// 添加记录到数据库
-	if err := d.db.WithContext(ctx).Create(txo).Error; err != nil {
-		return fmt.Errorf("创建交易输出记录失败: %w", err)
-	}
-	return nil
+// InsertFtTxo 插入一条代币交易输出记录
+func (dao *FtTxoDAO) InsertFtTxo(txo *dbtable.FtTxoSet) error {
+	return dao.db.Create(txo).Error
 }
 
-// GetByTxidAndVout 根据交易ID和输出索引获取记录
-func (d *FtTxoDAO) GetByTxidAndVout(ctx context.Context, txid string, vout int) (*dbtable.FtTxoSet, error) {
+// GetFtTxoByTxidVout 根据交易ID和输出索引获取代币交易输出
+func (dao *FtTxoDAO) GetFtTxoByTxidVout(txid string, vout int) (*dbtable.FtTxoSet, error) {
 	var txo dbtable.FtTxoSet
-	if err := d.db.WithContext(ctx).Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).First(&txo).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil // 返回nil表示没有找到记录
-		}
-		return nil, fmt.Errorf("查询交易输出记录失败: %w", err)
+	err := dao.db.Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).First(&txo).Error
+	if err != nil {
+		return nil, err
 	}
 	return &txo, nil
 }
 
-// ListByHolderAndContract 根据持有者和合约ID列出交易输出记录
-func (d *FtTxoDAO) ListByHolderAndContract(ctx context.Context, holderScript string, contractId string) ([]*dbtable.FtTxoSet, error) {
+// UpdateFtTxo 更新代币交易输出信息
+func (dao *FtTxoDAO) UpdateFtTxo(txo *dbtable.FtTxoSet) error {
+	return dao.db.Save(txo).Error
+}
+
+// MarkFtTxoAsSpent 标记代币交易输出为已花费
+func (dao *FtTxoDAO) MarkFtTxoAsSpent(txid string, vout int) error {
+	return dao.db.Model(&dbtable.FtTxoSet{}).Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).
+		Update("if_spend", true).Error
+}
+
+// DeleteFtTxo 删除代币交易输出
+func (dao *FtTxoDAO) DeleteFtTxo(txid string, vout int) error {
+	return dao.db.Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).Delete(&dbtable.FtTxoSet{}).Error
+}
+
+// GetFtTxosByHolderAndContract 根据持有者脚本和合约ID获取代币交易输出列表
+func (dao *FtTxoDAO) GetFtTxosByHolderAndContract(holderScript string, contractId string) ([]*dbtable.FtTxoSet, error) {
 	var txos []*dbtable.FtTxoSet
-	query := d.db.WithContext(ctx).Where("ft_holder_combine_script = ? AND ft_contract_id = ?", holderScript, contractId)
-	if err := query.Find(&txos).Error; err != nil {
-		return nil, fmt.Errorf("查询持有者交易输出记录失败: %w", err)
-	}
-	return txos, nil
+	err := dao.db.Where("ft_holder_combine_script = ? AND ft_contract_id = ?", holderScript, contractId).
+		Find(&txos).Error
+	return txos, err
 }
 
-// ListUnspentByHolder 获取持有者的未花费交易输出记录
-func (d *FtTxoDAO) ListUnspentByHolder(ctx context.Context, holderScript string) ([]*dbtable.FtTxoSet, error) {
+// GetUnspentFtTxosByHolder 获取指定持有者的未花费代币交易输出
+func (dao *FtTxoDAO) GetUnspentFtTxosByHolder(holderScript string) ([]*dbtable.FtTxoSet, error) {
 	var txos []*dbtable.FtTxoSet
-	query := d.db.WithContext(ctx).Where("ft_holder_combine_script = ? AND if_spend = ?", holderScript, false)
-	if err := query.Find(&txos).Error; err != nil {
-		return nil, fmt.Errorf("查询未花费交易输出记录失败: %w", err)
-	}
-	return txos, nil
+	err := dao.db.Where("ft_holder_combine_script = ? AND if_spend = ?", holderScript, false).
+		Find(&txos).Error
+	return txos, err
 }
 
-// UpdateSpentStatus 更新交易输出记录的花费状态
-func (d *FtTxoDAO) UpdateSpentStatus(ctx context.Context, txid string, vout int, isSpent bool) error {
-	result := d.db.WithContext(ctx).Model(&dbtable.FtTxoSet{}).
-		Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).
-		Update("if_spend", isSpent)
-
-	if result.Error != nil {
-		return fmt.Errorf("更新交易输出花费状态失败: %w", result.Error)
-	}
-
-	if result.RowsAffected == 0 {
-		return fmt.Errorf("未找到指定的交易输出记录")
-	}
-
-	return nil
+// GetUnspentFtTxosByHolderAndContract 获取指定持有者和合约的未花费代币交易输出
+func (dao *FtTxoDAO) GetUnspentFtTxosByHolderAndContract(holderScript string, contractId string) ([]*dbtable.FtTxoSet, error) {
+	var txos []*dbtable.FtTxoSet
+	err := dao.db.Where("ft_holder_combine_script = ? AND ft_contract_id = ? AND if_spend = ?",
+		holderScript, contractId, false).Find(&txos).Error
+	return txos, err
 }
 
-// GetTotalBalanceByHolder 获取持有者的总余额
-func (d *FtTxoDAO) GetTotalBalanceByHolder(ctx context.Context, holderScript string, contractId string) (uint64, error) {
-	var total uint64
-
-	query := d.db.WithContext(ctx).
-		Model(&dbtable.FtTxoSet{}).
-		Select("COALESCE(SUM(ft_balance), 0) as total").
-		Where("ft_holder_combine_script = ? AND ft_contract_id = ? AND if_spend = ?", holderScript, contractId, false)
-
-	if err := query.Scan(&total).Error; err != nil {
-		return 0, fmt.Errorf("计算总余额失败: %w", err)
+// GetTotalBalanceByHolderAndContract 获取指定持有者和合约的未花费代币总余额
+func (dao *FtTxoDAO) GetTotalBalanceByHolderAndContract(holderScript string, contractId string) (uint64, error) {
+	type Result struct {
+		TotalBalance uint64
 	}
-
-	return total, nil
+	var result Result
+	err := dao.db.Model(&dbtable.FtTxoSet{}).Select("SUM(ft_balance) as total_balance").
+		Where("ft_holder_combine_script = ? AND ft_contract_id = ? AND if_spend = ?",
+			holderScript, contractId, false).Scan(&result).Error
+	return result.TotalBalance, err
 }
 
-// BatchCreate 批量创建交易输出记录
-func (d *FtTxoDAO) BatchCreate(ctx context.Context, txos []*dbtable.FtTxoSet) error {
-	if len(txos) == 0 {
-		return nil
-	}
-
-	if err := d.db.WithContext(ctx).CreateInBatches(txos, 100).Error; err != nil {
-		return fmt.Errorf("批量创建交易输出记录失败: %w", err)
-	}
-
-	return nil
+// BatchInsertFtTxos 批量插入代币交易输出记录
+func (dao *FtTxoDAO) BatchInsertFtTxos(txos []*dbtable.FtTxoSet) error {
+	return dao.db.CreateInBatches(txos, 100).Error
 }
 
-// DeleteByTxidAndVout 删除指定的交易输出记录
-func (d *FtTxoDAO) DeleteByTxidAndVout(ctx context.Context, txid string, vout int) error {
-	result := d.db.WithContext(ctx).
-		Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).
-		Delete(&dbtable.FtTxoSet{})
+// GetTotalBalanceByHolder 获取指定持有者和合约的未花费代币总余额
+func (dao *FtTxoDAO) GetTotalBalanceByHolder(ctx context.Context, holderScript string, contractId string) (uint64, error) {
+	type Result struct {
+		TotalBalance uint64
+	}
+	var result Result
+	err := dao.db.Model(&dbtable.FtTxoSet{}).Select("SUM(ft_balance) as total_balance").
+		Where("ft_holder_combine_script = ? AND ft_contract_id = ? AND if_spend = ?",
+			holderScript, contractId, false).Scan(&result).Error
 
-	if result.Error != nil {
-		return fmt.Errorf("删除交易输出记录失败: %w", result.Error)
+	// 如果没有记录，返回0
+	if err == gorm.ErrRecordNotFound {
+		return 0, nil
 	}
 
-	return nil
+	// 处理结果为nil的情况
+	if result.TotalBalance == 0 {
+		return 0, nil
+	}
+
+	return result.TotalBalance, err
 }
