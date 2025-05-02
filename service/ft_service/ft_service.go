@@ -3,7 +3,9 @@ package ft
 import (
 	"net/http"
 
+	"ginproject/entity/constant"
 	"ginproject/entity/ft"
+	"ginproject/entity/utility"
 	ftlogic "ginproject/logic/ft"
 	"ginproject/middleware/log"
 
@@ -31,7 +33,7 @@ func (s *FtService) GetFtBalanceByAddress(c *gin.Context) {
 	var req ft.FtBalanceAddressRequest
 	if err := c.ShouldBindUri(&req); err != nil {
 		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
-		c.JSON(http.StatusOK, ft.NewErrorResponse(ft.CodeInvalidParams, "无效的请求参数"))
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
 		return
 	}
 
@@ -41,7 +43,7 @@ func (s *FtService) GetFtBalanceByAddress(c *gin.Context) {
 	response, err := s.ftLogic.GetFtBalance(ctx, &req)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "处理FT余额查询失败: %v", err)
-		c.JSON(http.StatusOK, ft.NewErrorResponse(ft.CodeServerError, "查询FT余额失败"))
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询FT余额失败"))
 		return
 	}
 

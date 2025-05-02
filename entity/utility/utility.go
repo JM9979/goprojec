@@ -1,11 +1,41 @@
-package ft
+package utility
 
 import (
 	"encoding/hex"
 	"fmt"
 
+	"ginproject/entity/constant"
+
 	"github.com/btcsuite/btcutil/base58"
 )
+
+// APIResponse API通用响应结构
+type APIResponse struct {
+	// 错误码
+	Code int `json:"code"`
+	// 消息
+	Message string `json:"message"`
+	// 数据
+	Data interface{} `json:"data"`
+}
+
+// NewSuccessResponse 创建成功响应
+func NewSuccessResponse(data interface{}) APIResponse {
+	return APIResponse{
+		Code:    constant.CodeSuccess,
+		Message: "success",
+		Data:    data,
+	}
+}
+
+// NewErrorResponse 创建错误响应
+func NewErrorResponse(code int, message string) APIResponse {
+	return APIResponse{
+		Code:    code,
+		Message: message,
+		Data:    nil,
+	}
+}
 
 // ConvertAddressToPublicKeyHash 将加密货币地址转换为公钥哈希
 // 使用Base58解码，返回公钥哈希的十六进制字符串表示

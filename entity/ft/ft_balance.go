@@ -1,6 +1,10 @@
 package ft
 
-import "fmt"
+import (
+	"fmt"
+
+	"ginproject/entity/utility"
+)
 
 // FtBalanceAddressRequest 获取指定地址和合约的FT余额请求
 type FtBalanceAddressRequest struct {
@@ -12,7 +16,7 @@ type FtBalanceAddressRequest struct {
 
 // GetCombineScript 获取地址对应的组合脚本
 func (req *FtBalanceAddressRequest) GetCombineScript() (string, error) {
-	pubKeyHash, err := ConvertAddressToPublicKeyHash(req.Address)
+	pubKeyHash, err := utility.ConvertAddressToPublicKeyHash(req.Address)
 	if err != nil {
 		return "", err
 	}
