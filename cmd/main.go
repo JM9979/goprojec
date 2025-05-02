@@ -8,6 +8,7 @@ import (
 	"ginproject/repo"
 	"ginproject/service"
 	tbcapi "ginproject/service/tbc_api"
+	ft_service "ginproject/service/ft_service"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -43,4 +44,8 @@ func registerRoutes(r *gin.Engine) {
 
 	// 添加健康检查端点
 	apiGroup.GET("/health", tbcapi.NewTbcApiService().HealthCheck)
+
+	// 注册FT服务API
+	ftService := ft_service.NewFtService()
+	apiGroup.GET("/ft/balance/address/:address/contract/:contract_id", ftService.GetFtBalanceByAddress)
 }

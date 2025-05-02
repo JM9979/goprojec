@@ -3,6 +3,7 @@ module ginproject
 go 1.23.7
 
 require (
+	github.com/btcsuite/btcutil v1.0.2
 	github.com/fsnotify/fsnotify v1.8.0
 	github.com/gin-gonic/gin v1.10.0
 	github.com/spf13/viper v1.20.1
