@@ -7,8 +7,8 @@ import (
 	"ginproject/middleware/trace"
 	"ginproject/repo"
 	"ginproject/service"
-	tbcapi "ginproject/service/tbc_api"
 	ft_service "ginproject/service/ft_service"
+	tbcapi "ginproject/service/tbc_api"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -48,4 +48,5 @@ func registerRoutes(r *gin.Engine) {
 	// 注册FT服务API
 	ftService := ft_service.NewFtService()
 	apiGroup.GET("/ft/balance/address/:address/contract/:contract_id", ftService.GetFtBalanceByAddress)
+	apiGroup.GET("/ft/utxo/address/:address/contract/:contract_id", ftService.GetFtUtxoByAddress)
 }
