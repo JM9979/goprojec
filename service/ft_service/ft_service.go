@@ -104,3 +104,47 @@ func (s *FtService) GetFtInfoByContractId(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// GetMultiFtBalanceByAddress 获取地址持有的多个代币余额
+// 路由: POST /v1/tbc/main/ft/balance/address/:address/contract/ids
+func (s *FtService) GetMultiFtBalanceByAddress(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 从URI获取地址参数
+	address := c.Param("address")
+	if address == "" {
+		log.ErrorWithContextf(ctx, "地址参数为空")
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "地址不能为空"))
+		return
+	}
+
+	// 绑定JSON请求体
+	var reqBody struct {
+		FtContractId []string `json:"ftContractId" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		log.ErrorWithContextf(ctx, "绑定JSON请求体失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	// 构造完整请求对象
+	req := &ft.FtBalanceMultiContractRequest{
+		Address:      address,
+		FtContractId: reqBody.FtContractId,
+	}
+
+	log.InfoWithContextf(ctx, "获取多个FT余额请求: 地址=%s, 合约数量=%d", req.Address, len(req.FtContractId))
+
+	// 调用逻辑层处理业务
+	responseList, err := s.ftLogic.GetMultiFtBalanceByAddress(ctx, req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理多个FT余额查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询多个FT余额失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, responseList)
+}

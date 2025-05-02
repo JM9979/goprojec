@@ -59,3 +59,59 @@ func (req *FtBalanceAddressRequest) Validate() error {
 
 	return nil
 }
+
+// FtBalanceMultiContractRequest 获取地址持有的多个代币余额请求
+type FtBalanceMultiContractRequest struct {
+	// 用户钱包地址
+	Address string `uri:"address" binding:"required"`
+	// FT合约ID列表
+	FtContractId []string `json:"ftContractId" binding:"required"`
+}
+
+// GetCombineScript 获取地址对应的组合脚本
+func (req *FtBalanceMultiContractRequest) GetCombineScript() (string, error) {
+	pubKeyHash, err := utility.ConvertAddressToPublicKeyHash(req.Address)
+	if err != nil {
+		return "", err
+	}
+	return pubKeyHash, nil
+}
+
+// Validate 验证FtBalanceMultiContractRequest的参数
+func (req *FtBalanceMultiContractRequest) Validate() error {
+	// 检查地址是否为空
+	if req.Address == "" {
+		return fmt.Errorf("地址不能为空")
+	}
+
+	// 检查合约ID列表是否为空
+	if len(req.FtContractId) == 0 {
+		return fmt.Errorf("合约ID列表不能为空")
+	}
+
+	// 检查地址格式是否合法
+	if len(req.Address) < 6 {
+		return fmt.Errorf("地址格式不正确")
+	}
+
+	// 检查每个合约ID是否合法
+	for _, contractId := range req.FtContractId {
+		if len(contractId) < 8 {
+			return fmt.Errorf("合约ID格式不正确: %s", contractId)
+		}
+	}
+
+	return nil
+}
+
+// TBC20FTBalanceResponse 批量查询FT余额响应
+type TBC20FTBalanceResponse struct {
+	// 组合脚本（由地址转换而来）
+	CombineScript string `json:"combineScript"`
+	// FT合约ID
+	FtContractId string `json:"ftContractId"`
+	// FT小数位数
+	FtDecimal int `json:"ftDecimal"`
+	// FT余额
+	FtBalance uint64 `json:"ftBalance"`
+}
