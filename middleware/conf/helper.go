@@ -72,9 +72,14 @@ func GetDBConfig() *config.DBConfig {
 	return &GetManager().GetConfig().DB
 }
 
-// GetRPCConfig 获取RPC配置
-func GetRPCConfig() *config.RPCConfig {
-	return &GetManager().GetConfig().RPC
+// GetTBCNodeConfig 获取TBCNode配置
+func GetTBCNodeConfig() *config.TBCNodeConfig {
+	return &GetManager().GetConfig().TBCNode
+}
+
+// GetElectrumXConfig 获取ElectrumX配置
+func GetElectrumXConfig() *config.ElectrumXConfig {
+	return &GetManager().GetConfig().ElectrumX
 }
 
 // 以下是一些常用配置项的快捷访问方法

@@ -5,8 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
-	"ginproject/repo/rpc"
+	"ginproject/middleware/log"
 )
 
 // TransactionResponse 表示交易信息的响应结构
@@ -60,9 +59,13 @@ func DecodeTxHash(ctx context.Context, txid string) (*TransactionResponse, error
 		return nil, errors.New("交易ID不能为空")
 	}
 
+	// 记录开始调用日志
+	log.Infof("开始查询交易: %s", txid)
+
 	// 调用区块链节点RPC
-	result, err := rpc.CallNodeRPC("getrawtransaction", []interface{}{txid, 1}, false)
+	result, err := CallRPC("getrawtransaction", []interface{}{txid, 1}, false)
 	if err != nil {
+		log.Errorf("查询交易失败: %s, 错误: %v", txid, err)
 		return nil, fmt.Errorf("解析交易失败: %w", err)
 	}
 
@@ -70,21 +73,24 @@ func DecodeTxHash(ctx context.Context, txid string) (*TransactionResponse, error
 	var tx TransactionResponse
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
+		log.Errorf("序列化交易结果失败: %v", err)
 		return nil, fmt.Errorf("解析RPC响应失败: %w", err)
 	}
 
 	if err := json.Unmarshal(resultBytes, &tx); err != nil {
+		log.Errorf("解析交易数据失败: %s, 错误: %v", txid, err)
 		return nil, fmt.Errorf("解析交易数据失败: %w", err)
 	}
 
+	log.Infof("成功查询交易: %s, 确认数: %d", txid, tx.Confirmations)
 	return &tx, nil
 }
 
 // DecodeTxHashAsync 异步获取交易详情
 // 这是DecodeTxHash的异步版本，用于需要非阻塞调用的场景
 // 例如在批量处理多个交易时，可以同时发起多个异步请求以提高性能
-func DecodeTxHashAsync(ctx context.Context, txid string) <-chan rpc.AsyncResult {
-	resultChan := make(chan rpc.AsyncResult, 1)
+func DecodeTxHashAsync(ctx context.Context, txid string) <-chan AsyncResult {
+	resultChan := make(chan AsyncResult, 1)
 
 	go func() {
 		defer close(resultChan)
@@ -93,7 +99,7 @@ func DecodeTxHashAsync(ctx context.Context, txid string) <-chan rpc.AsyncResult 
 		result, err := DecodeTxHash(ctx, txid)
 
 		// 将结果发送到通道
-		resultChan <- rpc.AsyncResult{
+		resultChan <- AsyncResult{
 			Result: result,
 			Error:  err,
 		}

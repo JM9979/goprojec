@@ -1,10 +1,11 @@
 package config
 
 type TBCConfig struct {
-	Server ServerConfig `yaml:"server"`
-	Log    LogConfig    `yaml:"log"`
-	DB     DBConfig     `yaml:"db"`
-	RPC    RPCConfig    `yaml:"rpc"`
+	Server    ServerConfig    `yaml:"server"`
+	Log       LogConfig       `yaml:"log"`
+	DB        DBConfig        `yaml:"db"`
+	TBCNode   TBCNodeConfig   `yaml:"tbcnode"`
+	ElectrumX ElectrumXConfig `yaml:"electrumx"`
 }
 
 type ServerConfig struct {
@@ -29,9 +30,17 @@ type DBConfig struct {
 	MaxOpenConns int    `yaml:"maxopenconns"`
 }
 
-// RPCConfig RPC客户端配置
-type RPCConfig struct {
+// TBCNodeConfig RPC客户端配置
+type TBCNodeConfig struct {
 	URL      string `yaml:"url"`
 	User     string `yaml:"user"`
 	Password string `yaml:"password"`
+}
+
+// ElectrumXConfig ElectrumX RPC客户端配置
+type ElectrumXConfig struct {
+	Host       string `yaml:"host"`
+	Port       int    `yaml:"port"`
+	Timeout    int    `yaml:"timeout"`
+	RetryCount int    `yaml:"retry_count"`
 }

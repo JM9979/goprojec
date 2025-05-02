@@ -1,25 +1,14 @@
-package rpc
+package blockchain
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
-	"time"
 
-	"ginproject/entity/config"
-	"ginproject/middleware/conf"
 	"ginproject/middleware/log"
-)
-
-// DefaultTimeout 是RPC调用的默认超时时间
-const DefaultTimeout = 30 * time.Second
-
-var (
-	// Config 全局RPC配置
-	Config config.RPCConfig
 )
 
 // RPCRequest 表示RPC请求
@@ -50,33 +39,36 @@ type AsyncResult struct {
 	Error  error
 }
 
-// Init 初始化RPC客户端
+// Init 初始化区块链RPC客户端
 func Init() error {
-	// 从配置中获取RPC相关设置
-	rpcConfig := conf.GetRPCConfig()
+	log.Info("初始化区块链RPC客户端...")
 
-	// 验证必要的配置项
-	if rpcConfig.URL == "" {
-		return fmt.Errorf("缺少RPC URL配置")
+	// 获取并验证配置
+	config := GetRPCConfig()
+	if config == nil {
+		return fmt.Errorf("获取区块链RPC配置失败")
 	}
 
-	if rpcConfig.User == "" || rpcConfig.Password == "" {
-		log.Warn("RPC认证信息不完整，可能需要在某些环境中进行认证")
+	if config.URL == "" {
+		return fmt.Errorf("区块链RPC URL未配置")
 	}
 
-	// 初始化配置
-	Config = *rpcConfig
-
-	log.Info("RPC客户端初始化成功")
+	log.Infof("区块链RPC客户端初始化完成，服务器: %s", config.URL)
 	return nil
 }
 
-// CallNodeRPC 同步调用节点RPC
-func CallNodeRPC(method string, params interface{}, fullResponse bool) (interface{}, error) {
+// CallRPC 同步调用节点RPC
+func CallRPC(method string, params interface{}, fullResponse bool) (interface{}, error) {
+	// 获取RPC配置
+	config := GetRPCConfig()
+	if config == nil {
+		return nil, fmt.Errorf("RPC配置未初始化")
+	}
+
 	// 创建RPC请求
 	rpcReq := RPCRequest{
 		JSONRPC: "1.0",
-		ID:      conf.GetServerConfig().Name,
+		ID:      "blockchain_client",
 		Method:  method,
 		Params:  params,
 	}
@@ -88,18 +80,28 @@ func CallNodeRPC(method string, params interface{}, fullResponse bool) (interfac
 	}
 
 	// 创建HTTP请求
-	req, err := http.NewRequest("POST", Config.URL, bytes.NewBuffer(reqBody))
+	req, err := http.NewRequest("POST", config.URL, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return nil, fmt.Errorf("创建HTTP请求失败: %w", err)
 	}
 
 	// 设置请求头
 	req.Header.Set("Content-Type", "application/json")
+
 	// 设置基本认证
-	req.SetBasicAuth(Config.User, Config.Password)
+	if config.User != "" && config.Password != "" {
+		req.SetBasicAuth(config.User, config.Password)
+	}
+
+	// 创建带超时的客户端
+	client := &http.Client{
+		Timeout: config.Timeout,
+	}
+
+	// 记录请求日志
+	log.Debugf("发送区块链RPC请求: method=%s, params=%v", method, params)
 
 	// 发送请求
-	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("发送RPC请求失败: %w", err)
@@ -107,7 +109,7 @@ func CallNodeRPC(method string, params interface{}, fullResponse bool) (interfac
 	defer resp.Body.Close()
 
 	// 读取响应
-	respBody, err := ioutil.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("读取RPC响应失败: %w", err)
 	}
@@ -115,11 +117,13 @@ func CallNodeRPC(method string, params interface{}, fullResponse bool) (interfac
 	// 解析响应
 	var rpcResp RPCResponse
 	if err := json.Unmarshal(respBody, &rpcResp); err != nil {
+		log.Errorf("解析RPC响应失败: %s", string(respBody))
 		return nil, fmt.Errorf("解析RPC响应失败: %w", err)
 	}
 
 	// 检查错误
 	if rpcResp.Error != nil {
+		log.Warnf("RPC调用错误: %s (代码: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
 		return nil, fmt.Errorf("RPC调用错误: %s (代码: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
 	}
 
@@ -130,8 +134,8 @@ func CallNodeRPC(method string, params interface{}, fullResponse bool) (interfac
 	return rpcResp.Result, nil
 }
 
-// CallNodeRPCAsync 异步调用节点RPC
-func CallNodeRPCAsync(ctx context.Context, method string, params interface{}, fullResponse bool) <-chan AsyncResult {
+// CallRPCAsync 异步调用节点RPC
+func CallRPCAsync(ctx context.Context, method string, params interface{}, fullResponse bool) <-chan AsyncResult {
 	resultChan := make(chan AsyncResult, 1)
 
 	go func() {
@@ -150,7 +154,7 @@ func CallNodeRPCAsync(ctx context.Context, method string, params interface{}, fu
 		}
 
 		// 调用同步版本的RPC方法
-		result, err := CallNodeRPC(method, params, fullResponse)
+		result, err := CallRPC(method, params, fullResponse)
 
 		// 将结果发送到通道
 		resultChan <- AsyncResult{

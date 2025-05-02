@@ -3,6 +3,7 @@ package blockchain
 import (
 	"encoding/hex"
 	"errors"
+	"regexp"
 	"strconv"
 )
 
@@ -66,4 +67,34 @@ func HexToInt64(hexStr string) (int64, error) {
 	}
 
 	return strconv.ParseInt(hexStr, 16, 64)
+}
+
+// ValidateHexString 验证字符串是否为有效的十六进制格式
+// 返回验证结果和错误信息
+func ValidateHexString(hexStr string) error {
+	if hexStr == "" {
+		return errors.New("十六进制字符串不能为空")
+	}
+
+	// 检查长度是否为偶数
+	if len(hexStr)%2 != 0 {
+		return errors.New("十六进制字符串长度必须为偶数")
+	}
+
+	// 使用正则表达式验证十六进制字符
+	match, err := regexp.MatchString("^[0-9a-fA-F]+$", hexStr)
+	if err != nil {
+		return errors.New("正则表达式匹配出错")
+	}
+	if !match {
+		return errors.New("字符串包含非十六进制字符")
+	}
+
+	// 尝试解码
+	_, err = hex.DecodeString(hexStr)
+	if err != nil {
+		return errors.New("无法解码十六进制字符串: " + err.Error())
+	}
+
+	return nil
 }
