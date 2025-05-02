@@ -11,6 +11,7 @@ import (
 
 	"ginproject/middleware/conf"
 	"ginproject/middleware/log"
+	"ginproject/repo/db"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -71,6 +72,9 @@ func (h *Server) GracefulShutdown() {
 	if err := h.server.Shutdown(ctx); err != nil {
 		log.Error("服务关闭时发生错误", zap.Error(err), zap.String("地址", h.server.Addr))
 	}
+
+	// 关闭数据库连接
+	db.Close()
 
 	log.Info("服务已安全关闭", zap.String("地址", h.server.Addr))
 }

@@ -6,6 +6,7 @@ import (
 	"ginproject/middleware/conf"
 	"ginproject/middleware/log"
 	"ginproject/middleware/trace"
+	"ginproject/repo/db"
 )
 
 // Global_init 全局初始化
@@ -42,6 +43,11 @@ func Global_init() error {
 
 	// 初始化追踪
 	trace.InitTracer(serverName)
+
+	// 初始化数据库连接
+	if err := db.Init(); err != nil {
+		return fmt.Errorf("数据库初始化失败: %w", err)
+	}
 
 	// 记录初始化成功日志
 	log.Info("全局配置和日志初始化成功")
