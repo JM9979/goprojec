@@ -8,11 +8,11 @@ log:
 
 # 数据库配置
 db:
-  host: "localhost"
+  host: "develope.tbcdev.xyz"
   port: 3306
   username: "root"
-  password: "password"
-  database: "mydatabase"
+  password: "mysql149"
+  database: "TBC20721"
   charset: "utf8mb4"
   maxidleconns: 10
   maxopenconns: 100 
