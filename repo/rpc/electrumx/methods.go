@@ -6,7 +6,10 @@ import (
 	"fmt"
 
 	"ginproject/entity/electrumx"
+	utility "ginproject/entity/utility"
 	"ginproject/middleware/log"
+
+	"go.uber.org/zap"
 )
 
 // Global client instance
@@ -318,4 +321,122 @@ func GetScriptHistory(ctx context.Context, scriptHash string) (electrumx.Electru
 
 	log.InfoWithContextf(ctx, "成功获取脚本哈希历史, 共 %d 条记录", len(history))
 	return history, nil
+}
+
+// GetListUnspent 获取指定脚本哈希的未花费交易输出
+func GetListUnspent(scriptHash string) (electrumx.UtxoResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.Errorf("调用GetListUnspent失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.Infof("开始获取脚本哈希的UTXO: %s", scriptHash)
+
+	// 调用RPC方法
+	result, err := CallMethod("blockchain.scripthash.listunspent", []interface{}{scriptHash})
+	if err != nil {
+		log.Errorf("获取UTXO失败: %v", err)
+		return nil, fmt.Errorf("获取UTXO失败: %w", err)
+	}
+
+	// 解析响应
+	var utxos electrumx.UtxoResponse
+	if err := json.Unmarshal(result, &utxos); err != nil {
+		log.Errorf("解析UTXO响应失败: %v", err)
+		return nil, fmt.Errorf("解析UTXO响应失败: %w", err)
+	}
+
+	log.Infof("成功获取UTXO, 数量: %d", len(utxos))
+	return utxos, nil
+}
+
+// AsyncUtxoResult 异步UTXO结果
+type AsyncUtxoResult struct {
+	Result electrumx.UtxoResponse
+	Error  error
+}
+
+// GetListUnspentAsync 异步获取指定脚本哈希的未花费交易输出
+func GetListUnspentAsync(ctx context.Context, scriptHash string) <-chan AsyncUtxoResult {
+	resultChan := make(chan AsyncUtxoResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			resultChan <- AsyncUtxoResult{
+				Result: nil,
+				Error:  ctx.Err(),
+			}
+			return
+		default:
+			// 继续执行
+		}
+
+		result, err := GetListUnspent(scriptHash)
+		resultChan <- AsyncUtxoResult{
+			Result: result,
+			Error:  err,
+		}
+	}()
+
+	return resultChan
+}
+
+// AddressToScriptHash 将比特币地址转换为脚本哈希
+func AddressToScriptHash(address string) (string, error) {
+	// 调用工具函数进行转换
+	scriptHash, err := utility.AddressToScriptHash(address)
+	if err != nil {
+		log.Errorf("地址转换为脚本哈希失败: %v", err)
+		return "", fmt.Errorf("地址转换为脚本哈希失败: %w", err)
+	}
+
+	return scriptHash, nil
+}
+
+// 错误定义
+var (
+	ErrEmptyScriptHash = fmt.Errorf("脚本哈希不能为空")
+)
+
+// GetUnspent 获取指定脚本哈希的未花费交易输出
+func GetUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse, error) {
+	log.InfoWithContext(ctx, "开始获取脚本哈希的UTXO", zap.String("scriptHash", scriptHash))
+
+	// 参数校验
+	if scriptHash == "" {
+		log.ErrorWithContext(ctx, "脚本哈希不能为空")
+		return nil, ErrEmptyScriptHash
+	}
+
+	// 调用ElectrumX RPC获取UTXO列表
+	utxos, err := GetListUnspent(scriptHash)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取UTXO失败",
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, err
+	}
+
+	log.InfoWithContext(ctx, "成功获取UTXO",
+		zap.String("scriptHash", scriptHash),
+		zap.Int("count", len(utxos)))
+	return utxos, nil
+}
+
+// ConvertAddressToScript 将WIF地址转换为脚本哈希
+func ConvertAddressToScript(address string) (string, error) {
+	// 调用AddressToScriptHash函数进行转换
+	scriptHash, err := AddressToScriptHash(address)
+	if err != nil {
+		log.Errorf("地址转换为脚本哈希失败: %v", err)
+		return "", err
+	}
+
+	return scriptHash, nil
 }

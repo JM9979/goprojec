@@ -7,6 +7,7 @@ import (
 	"ginproject/middleware/trace"
 	"ginproject/repo"
 	"ginproject/service"
+	address_service "ginproject/service/address_service"
 	ft_service "ginproject/service/ft_service"
 	tbcapi "ginproject/service/tbc_api"
 
@@ -69,4 +70,8 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/ft/tokens/held/by/address/:address", ftService.GetTokenListHeldByAddress)
 	// 添加获取代币持有者排名的路由
 	apiGroup.GET("/ft/holder/rank/contract/:contract_id/page/:page/size/:size", ftService.GetHolderRankByContractId)
+
+	// 添加获取地址未花费交易输出的路由
+	addressService := address_service.NewAddressService()
+	apiGroup.GET("/address/:address/unspent", addressService.GetAddressUnspentUtxos)
 }

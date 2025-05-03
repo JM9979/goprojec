@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"ginproject/entity/constant"
@@ -451,4 +452,74 @@ func reverseByteOrder(hexStr string) string {
 	}
 
 	return strings.Join(bytePairs, "")
+}
+
+// 地址类型常量
+const (
+	AddressTypeInvalid = iota
+	AddressTypeP2PKH
+	AddressTypeP2SH
+)
+
+// ValidateWIFAddress 验证WIF格式的地址是否合法
+func ValidateWIFAddress(address string) (bool, int, error) {
+	// 检查地址是否为空
+	if address == "" {
+		return false, AddressTypeInvalid, fmt.Errorf("地址不能为空")
+	}
+
+	// 检查地址长度
+	if len(address) < 26 || len(address) > 35 {
+		return false, AddressTypeInvalid, fmt.Errorf("地址长度无效")
+	}
+
+	// 使用正则表达式验证基本格式
+	// P2PKH地址通常以1开头
+	// P2SH地址通常以3开头
+	p2pkhRegex := regexp.MustCompile(`^1[a-km-zA-HJ-NP-Z1-9]{25,34}$`)
+	p2shRegex := regexp.MustCompile(`^3[a-km-zA-HJ-NP-Z1-9]{25,34}$`)
+
+	if p2pkhRegex.MatchString(address) {
+		return true, AddressTypeP2PKH, nil
+	}
+
+	if p2shRegex.MatchString(address) {
+		return true, AddressTypeP2SH, nil
+	}
+
+	return false, AddressTypeInvalid, fmt.Errorf("无效的地址格式")
+}
+
+// AddressToScriptHash 将比特币地址转换为ElectrumX使用的脚本哈希
+// 首先将地址转换为公钥哈希，然后计算SHA256哈希，返回小端序的十六进制字符串
+func AddressToScriptHash(address string) (string, error) {
+	// 获取公钥哈希
+	pubKeyHash, err := ConvertAddressToPublicKeyHash(address)
+	if err != nil {
+		return "", fmt.Errorf("转换地址到公钥哈希失败: %w", err)
+	}
+
+	// 添加脚本前缀和后缀
+	// P2PKH脚本格式: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+	script := fmt.Sprintf("76a914%s88ac", pubKeyHash)
+
+	// 将脚本转换为字节
+	scriptBytes, err := hex.DecodeString(script)
+	if err != nil {
+		return "", fmt.Errorf("解码脚本失败: %w", err)
+	}
+
+	// 计算SHA256哈希
+	hash := sha256.Sum256(scriptBytes)
+
+	// 转换为小端序（反转字节顺序）
+	reversed := make([]byte, len(hash))
+	for i := 0; i < len(hash); i++ {
+		reversed[i] = hash[len(hash)-1-i]
+	}
+
+	// 转换为十六进制字符串
+	scriptHash := hex.EncodeToString(reversed)
+
+	return scriptHash, nil
 }
