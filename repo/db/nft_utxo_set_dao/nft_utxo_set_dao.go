@@ -108,3 +108,24 @@ func (dao *NftUtxoSetDAO) GetPoolNftInfoByContractId(ctx context.Context, ftCont
 
 	return result.NftUtxoId, result.NftCodeBalance, nil
 }
+
+// GetPoolListByFtContractId 根据代币合约ID获取相关的流动池列表
+func (dao *NftUtxoSetDAO) GetPoolListByFtContractId(ctx context.Context, ftContractId string) ([]struct {
+	NftContractId   string `gorm:"column:nft_contract_id"`
+	CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+}, error) {
+	var results []struct {
+		NftContractId   string `gorm:"column:nft_contract_id"`
+		CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+	}
+
+	// 从nft_utxo_set表中查询与指定代币相关的所有流动池
+	// 使用nft_icon字段存储token_pair_a_id，并查询nft_holder_address='LP'的记录
+	err := dao.db.WithContext(ctx).
+		Table("TBC20721.nft_utxo_set").
+		Select("nft_contract_id, nft_create_timestamp").
+		Where("nft_holder_address = ? AND nft_icon = ?", "LP", ftContractId).
+		Find(&results).Error
+
+	return results, err
+}

@@ -251,3 +251,57 @@ func (s *FtService) GetFtTokenList(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// DecodeFtTransactionHistory 解析FT交易历史
+// 路由: GET /v1/tbc/main/ft/decode/tx/history/{txid}
+func (s *FtService) DecodeFtTransactionHistory(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.FtTxDecodeRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "解析FT交易历史请求: 交易ID=%s", req.Txid)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.DecodeFtTransactionHistory(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理FT交易解析失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "解析FT交易失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
+
+// GetPoolsOfTokenByContractId 获取代币相关的流动池列表
+// 路由: GET /v1/tbc/main/ft/pools/of/token/contract/id/:ft_contract_id
+func (s *FtService) GetPoolsOfTokenByContractId(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.TBC20PoolListRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取代币相关流动池列表请求: 合约ID=%s", req.FtContractId)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetPoolListByFtContractId(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理代币相关流动池列表查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询代币相关流动池列表失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
