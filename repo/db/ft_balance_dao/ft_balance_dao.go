@@ -1,8 +1,10 @@
 package ft_balance_dao
 
 import (
-	"ginproject/repo/db"
+	"context"
+
 	"ginproject/entity/dbtable"
+	"ginproject/repo/db"
 
 	"gorm.io/gorm"
 )
@@ -93,4 +95,25 @@ func (dao *FtBalanceDAO) GetHoldersCountByContractId(contractId string) (int64, 
 	var count int64
 	err := dao.db.Model(&dbtable.FtBalance{}).Where("ft_contract_id = ? AND ft_balance > 0", contractId).Count(&count).Error
 	return count, err
+}
+
+// GetFtBalanceRankByContractId 获取代币持有者排名列表
+func (dao *FtBalanceDAO) GetFtBalanceRankByContractId(ctx context.Context, contractId string, page, size int) ([]*dbtable.FtBalance, error) {
+	var balances []*dbtable.FtBalance
+
+	// 计算偏移量
+	offset := page * size
+
+	// 查询持有者排名，按持有余额降序排序
+	err := dao.db.Where("ft_contract_id = ? AND ft_balance > 0", contractId).
+		Order("ft_balance DESC").
+		Offset(offset).
+		Limit(size).
+		Find(&balances).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return balances, nil
 }

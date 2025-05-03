@@ -6,26 +6,7 @@ import (
 
 	"ginproject/entity/ft"
 	"ginproject/middleware/log"
-	"ginproject/repo/db/ft_tokens_dao"
-	"ginproject/repo/db/ft_txo_dao"
-	"ginproject/repo/db/nft_utxo_set_dao"
 )
-
-// FtLogic FT代币逻辑处理
-type FtLogic struct {
-	ftTxoDAO     *ft_txo_dao.FtTxoDAO
-	ftTokensDAO  *ft_tokens_dao.FtTokensDAO
-	ftPoolNftDAO *nft_utxo_set_dao.NftUtxoSetDAO
-}
-
-// NewFtLogic 创建FtLogic实例
-func NewFtLogic() *FtLogic {
-	return &FtLogic{
-		ftTxoDAO:     ft_txo_dao.NewFtTxoDAO(),
-		ftTokensDAO:  ft_tokens_dao.NewFtTokensDAO(),
-		ftPoolNftDAO: nft_utxo_set_dao.NewNftUtxoSetDAO(),
-	}
-}
 
 // GetFtBalance 获取FT余额
 func (l *FtLogic) GetFtBalance(ctx context.Context, req *ft.FtBalanceAddressRequest) (*ft.FtBalanceAddressResponse, error) {

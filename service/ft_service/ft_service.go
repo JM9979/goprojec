@@ -415,3 +415,31 @@ func (s *FtService) GetPoolList(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// GetHolderRankByContractId 获取代币持有者排名
+// 路由: GET /v1/tbc/main/ft/holder/rank/contract/:contract_id/page/:page/size/:size
+func (s *FtService) GetHolderRankByContractId(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.FtHolderRankRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取代币持有者排名请求: 合约ID=%s, 页码=%d, 每页大小=%d",
+		req.ContractId, req.Page, req.Size)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetFtHolderRank(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理代币持有者排名查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询代币持有者排名失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
