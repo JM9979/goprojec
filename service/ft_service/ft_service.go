@@ -223,3 +223,31 @@ func (s *FtService) GetPoolNFTInfoByContractId(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// GetFtTokenList 获取代币列表
+// 路由: GET /v1/tbc/main/ft/tokens/page/{page}/size/{size}/orderby/{order_by}
+func (s *FtService) GetFtTokenList(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.FtTokenListRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取代币列表请求: 页码=%d, 每页大小=%d, 排序字段=%s",
+		req.Page, req.Size, req.OrderBy)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetFtTokenList(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理代币列表查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询代币列表失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}

@@ -125,3 +125,55 @@ func (dao *FtTokensDAO) GetFtCodeScriptAndDecimal(ctx context.Context, contractI
 	log.InfoWithContextf(ctx, "成功获取合约ID[%s]的代币代码脚本和精度", contractId)
 	return token.FtCodeScript, token.FtDecimal, nil
 }
+
+// GetTokensPageByCreateTime 根据创建时间排序获取代币分页列表
+func (dao *FtTokensDAO) GetTokensPageByCreateTime(ctx context.Context, page, size int) ([]*dbtable.FtTokens, int64, error) {
+	var tokens []*dbtable.FtTokens
+	var total int64
+
+	// 获取总记录数
+	if err := dao.db.Model(&dbtable.FtTokens{}).Count(&total).Error; err != nil {
+		log.ErrorWithContextf(ctx, "获取代币总数失败: %v", err)
+		return nil, 0, err
+	}
+
+	// 获取分页数据，按创建时间排序
+	offset := page * size
+	if err := dao.db.Order("ft_create_timestamp DESC").
+		Offset(offset).
+		Limit(size).
+		Find(&tokens).Error; err != nil {
+		log.ErrorWithContextf(ctx, "获取代币分页列表失败: %v", err)
+		return nil, 0, err
+	}
+
+	log.InfoWithContextf(ctx, "成功获取代币分页列表，总数: %d, 当前页: %d, 每页大小: %d",
+		total, page, size)
+	return tokens, total, nil
+}
+
+// GetTokensPageByHoldersCount 根据持有人数量排序获取代币分页列表
+func (dao *FtTokensDAO) GetTokensPageByHoldersCount(ctx context.Context, page, size int) ([]*dbtable.FtTokens, int64, error) {
+	var tokens []*dbtable.FtTokens
+	var total int64
+
+	// 获取总记录数
+	if err := dao.db.Model(&dbtable.FtTokens{}).Count(&total).Error; err != nil {
+		log.ErrorWithContextf(ctx, "获取代币总数失败: %v", err)
+		return nil, 0, err
+	}
+
+	// 获取分页数据，按持有人数量排序
+	offset := page * size
+	if err := dao.db.Order("ft_holders_count DESC").
+		Offset(offset).
+		Limit(size).
+		Find(&tokens).Error; err != nil {
+		log.ErrorWithContextf(ctx, "获取代币分页列表失败: %v", err)
+		return nil, 0, err
+	}
+
+	log.InfoWithContextf(ctx, "成功获取代币分页列表，总数: %d, 当前页: %d, 每页大小: %d",
+		total, page, size)
+	return tokens, total, nil
+}

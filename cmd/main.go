@@ -53,4 +53,6 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.POST("/ft/balance/address/:address/contract/ids", ftService.GetMultiFtBalanceByAddress)
 	apiGroup.GET("/ft/pool/nft/info/contract/id/:ft_contract_id", ftService.GetPoolNFTInfoByContractId)
 	apiGroup.GET("/ft/history/address/:address/contract/:contract_id/page/:page/size/:size", ftService.GetFtHistoryByAddress)
+	// 添加获取代币列表的路由
+	apiGroup.GET("/ft/tokens/page/:page/size/:size/orderby/:order_by", ftService.GetFtTokenList)
 }
