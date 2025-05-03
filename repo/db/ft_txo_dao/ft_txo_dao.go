@@ -115,3 +115,26 @@ func (dao *FtTxoDAO) GetTotalBalanceByHolder(ctx context.Context, holderScript s
 
 	return result.TotalBalance, err
 }
+
+// GetFtUtxoInfo 根据交易ID和输出索引获取代币余额、持有者组合脚本和合约ID
+func (dao *FtTxoDAO) GetFtUtxoInfo(ctx context.Context, txid string, vout int) (uint64, string, string, error) {
+	var result struct {
+		FtBalance             uint64
+		FtHolderCombineScript string
+		FtContractId          string
+	}
+
+	err := dao.db.Model(&dbtable.FtTxoSet{}).
+		Select("ft_balance, ft_holder_combine_script, ft_contract_id").
+		Where("utxo_txid = ? AND utxo_vout = ?", txid, vout).
+		First(&result).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return 0, "", "", nil
+		}
+		return 0, "", "", err
+	}
+
+	return result.FtBalance, result.FtHolderCombineScript, result.FtContractId, nil
+}

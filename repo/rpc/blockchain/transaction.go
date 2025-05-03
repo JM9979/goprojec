@@ -5,44 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
+	"ginproject/entity/blockchain"
 	"ginproject/middleware/log"
 )
-
-// TransactionResponse 表示交易信息的响应结构
-type TransactionResponse struct {
-	Txid     string `json:"txid"`
-	Hash     string `json:"hash"`
-	Version  int    `json:"version"`
-	Size     int    `json:"size"`
-	Vsize    int    `json:"vsize"`
-	Weight   int    `json:"weight"`
-	LockTime int    `json:"locktime"`
-	Vin      []struct {
-		Txid      string `json:"txid"`
-		Vout      int    `json:"vout"`
-		ScriptSig struct {
-			Asm string `json:"asm"`
-			Hex string `json:"hex"`
-		} `json:"scriptSig"`
-		Sequence int64 `json:"sequence"`
-	} `json:"vin"`
-	Vout []struct {
-		Value        float64 `json:"value"`
-		N            int     `json:"n"`
-		ScriptPubKey struct {
-			Asm       string   `json:"asm"`
-			Hex       string   `json:"hex"`
-			ReqSigs   int      `json:"reqSigs,omitempty"`
-			Type      string   `json:"type"`
-			Addresses []string `json:"addresses,omitempty"`
-		} `json:"scriptPubKey"`
-	} `json:"vout"`
-	Hex           string `json:"hex"`
-	Blockhash     string `json:"blockhash,omitempty"`
-	Confirmations int    `json:"confirmations,omitempty"`
-	Time          int64  `json:"time,omitempty"`
-	Blocktime     int64  `json:"blocktime,omitempty"`
-}
 
 // DecodeTxHash 根据交易哈希获取交易详情
 // 此方法通过区块链节点RPC接口查询指定交易哈希的详细信息
@@ -54,7 +20,7 @@ type TransactionResponse struct {
 // 返回:
 //   - *TransactionResponse: 包含交易详情的结构体指针
 //   - error: 如有错误发生则返回错误信息
-func DecodeTxHash(ctx context.Context, txid string) (*TransactionResponse, error) {
+func DecodeTxHash(ctx context.Context, txid string) (*blockchain.TransactionResponse, error) {
 	if txid == "" {
 		return nil, errors.New("交易ID不能为空")
 	}
@@ -70,7 +36,7 @@ func DecodeTxHash(ctx context.Context, txid string) (*TransactionResponse, error
 	}
 
 	// 将返回结果转换为TransactionResponse结构
-	var tx TransactionResponse
+	var tx blockchain.TransactionResponse
 	resultBytes, err := json.Marshal(result)
 	if err != nil {
 		log.Errorf("序列化交易结果失败: %v", err)

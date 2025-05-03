@@ -77,7 +77,7 @@ func (l *FtLogic) GetNFTPoolInfoByContractId(ctx context.Context, req *ft.TBC20P
 }
 
 // extractPoolProviderInfo 提取池服务提供商信息
-func (l *FtLogic) extractPoolProviderInfo(decodeTx *rpcblockchain.TransactionResponse) (string, int64) {
+func (l *FtLogic) extractPoolProviderInfo(decodeTx *blockchain.TransactionResponse) (string, int64) {
 	var poolServiceProviderHex string = ""
 	var poolVersion int64 = 1
 
@@ -104,7 +104,7 @@ func (l *FtLogic) extractPoolProviderInfo(decodeTx *rpcblockchain.TransactionRes
 }
 
 // parseTapeScriptAndSetResponse 解析磁带脚本并设置响应值
-func (l *FtLogic) parseTapeScriptAndSetResponse(ctx context.Context, decodeTx *rpcblockchain.TransactionResponse, response *ft.TBC20PoolNFTInfoResponse) error {
+func (l *FtLogic) parseTapeScriptAndSetResponse(ctx context.Context, decodeTx *blockchain.TransactionResponse, response *ft.TBC20PoolNFTInfoResponse) error {
 	// 解析磁带脚本
 	tapeScriptAsm := decodeTx.Vout[1].ScriptPubKey.Asm
 	tapeScriptAsmList := strings.Split(tapeScriptAsm, " ")
@@ -183,7 +183,7 @@ func (l *FtLogic) parseBalances(ctx context.Context, complexBalance string) (int
 }
 
 // DecodeTxHash 解码交易哈希，获取交易详情
-func (l *FtLogic) DecodeTxHash(ctx context.Context, txid string) (*rpcblockchain.TransactionResponse, error) {
+func (l *FtLogic) DecodeTxHash(ctx context.Context, txid string) (*blockchain.TransactionResponse, error) {
 	if txid == "" {
 		return nil, fmt.Errorf("交易ID不能为空")
 	}

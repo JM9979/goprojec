@@ -52,7 +52,7 @@ func initRPCConfig() {
 		Port:     electrumXConfig.Port,
 		UseTLS:   false,            // 默认不使用TLS
 		Timeout:  30 * time.Second, // 默认超时时间
-		Protocol: "TCP",            // 默认协议
+		Protocol: "tcp",            // 默认协议
 	}
 
 	// 验证必要的配置项
@@ -114,7 +114,7 @@ func ReloadConfig() error {
 		Port:     electrumXConfig.Port,
 		UseTLS:   false, // 默认不使用TLS
 		Timeout:  30 * time.Second,
-		Protocol: "TCP",
+		Protocol: "tcp",
 	}
 
 	if err := ValidateConfig(cfg); err != nil {

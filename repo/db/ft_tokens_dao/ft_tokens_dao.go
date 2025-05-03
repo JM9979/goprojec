@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"ginproject/entity/dbtable"
+	"ginproject/middleware/log"
 	"ginproject/repo/db"
 
 	"gorm.io/gorm"
@@ -104,4 +105,23 @@ func (dao *FtTokensDAO) GetFtDecimalByContractId(ctx context.Context, contractId
 		return 0, err
 	}
 	return token.FtDecimal, nil
+}
+
+// GetFtCodeScriptAndDecimal 根据合约ID获取代币代码脚本和精度
+func (dao *FtTokensDAO) GetFtCodeScriptAndDecimal(ctx context.Context, contractId string) (string, uint8, error) {
+	var token dbtable.FtTokens
+
+	// 查询代币代码脚本和精度
+	err := dao.db.Where("ft_contract_id = ?", contractId).Select("ft_code_script, ft_decimal").First(&token).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.WarnWithContextf(ctx, "未找到合约ID对应的代币信息: %s", contractId)
+			return "", 0, nil
+		}
+		log.ErrorWithContextf(ctx, "查询代币代码脚本和精度失败: %v", err)
+		return "", 0, err
+	}
+
+	log.InfoWithContextf(ctx, "成功获取合约ID[%s]的代币代码脚本和精度", contractId)
+	return token.FtCodeScript, token.FtDecimal, nil
 }

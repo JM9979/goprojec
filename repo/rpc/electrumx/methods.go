@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"ginproject/entity/electrumx"
 	"ginproject/middleware/log"
 )
 
@@ -224,4 +225,68 @@ func ServerFeatures() (map[string]interface{}, error) {
 	}
 
 	return features, nil
+}
+
+// GetScriptHashHistory 获取指定脚本哈希的交易历史
+func GetScriptHashHistory(scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.Errorf("调用GetScriptHashHistory失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.Infof("开始获取脚本哈希历史: %s", scriptHash)
+
+	// 调用RPC方法
+	result, err := CallMethod("blockchain.scripthash.get_history", []interface{}{scriptHash})
+	if err != nil {
+		log.Errorf("获取脚本哈希历史失败: %v", err)
+		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
+	}
+
+	// 解析响应
+	var history electrumx.ElectrumXHistoryResponse
+	if err := json.Unmarshal(result, &history); err != nil {
+		log.Errorf("解析脚本哈希历史失败: %v, 原始数据: %s", err, string(result))
+		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
+	}
+
+	log.Infof("成功获取脚本哈希历史, 共 %d 条记录", len(history))
+	return history, nil
+}
+
+// GetScriptHashHistoryAsync 异步获取指定脚本哈希的交易历史
+func GetScriptHashHistoryAsync(ctx context.Context, scriptHash string) <-chan AsyncHistoryResult {
+	resultChan := make(chan AsyncHistoryResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			resultChan <- AsyncHistoryResult{
+				Result: nil,
+				Error:  ctx.Err(),
+			}
+			return
+		default:
+			// 继续执行
+		}
+
+		history, err := GetScriptHashHistory(scriptHash)
+		resultChan <- AsyncHistoryResult{
+			Result: history,
+			Error:  err,
+		}
+	}()
+
+	return resultChan
+}
+
+// AsyncHistoryResult 表示异步获取历史记录的结果
+type AsyncHistoryResult struct {
+	Result electrumx.ElectrumXHistoryResponse
+	Error  error
 }

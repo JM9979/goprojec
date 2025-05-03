@@ -52,6 +52,34 @@ func (s *FtService) GetFtBalanceByAddress(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// GetFtHistoryByAddress 根据地址和合约ID获取FT交易历史
+// 路由: GET /v1/tbc/main/ft/history/address/:address/contract/:contract_id/page/:page/size/:size
+func (s *FtService) GetFtHistoryByAddress(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.FtHistoryRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取FT交易历史请求: 地址=%s, 合约ID=%s, 页码=%d, 每页大小=%d",
+		req.Address, req.ContractId, req.Page, req.Size)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetFtHistory(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理FT交易历史查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询FT交易历史失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
+
 // GetFtUtxoByAddress 根据地址和合约ID获取FT UTXO列表
 // 路由: GET /v1/tbc/main/ft/utxo/address/:address/contract/:contract_id
 func (s *FtService) GetFtUtxoByAddress(c *gin.Context) {
