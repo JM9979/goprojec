@@ -361,3 +361,30 @@ func (s *FtService) GetPoolHistoryByPoolId(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// GetPoolList 获取交易池列表
+// 路由: GET /v1/tbc/main/ft/pool/list/page/{page}/size/{size}
+func (s *FtService) GetPoolList(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.TBC20PoolPageRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取交易池列表请求: 页码=%d, 每页大小=%d", req.Page, req.Size)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetAllPoolList(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理交易池列表查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询交易池列表失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}

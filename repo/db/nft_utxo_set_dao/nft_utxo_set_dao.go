@@ -122,10 +122,45 @@ func (dao *NftUtxoSetDAO) GetPoolListByFtContractId(ctx context.Context, ftContr
 	// 从nft_utxo_set表中查询与指定代币相关的所有流动池
 	// 使用nft_icon字段存储token_pair_a_id，并查询nft_holder_address='LP'的记录
 	err := dao.db.WithContext(ctx).
-		Table("TBC20721.nft_utxo_set").
 		Select("nft_contract_id, nft_create_timestamp").
 		Where("nft_holder_address = ? AND nft_icon = ?", "LP", ftContractId).
 		Find(&results).Error
 
 	return results, err
+}
+
+// GetAllPoolsWithPagination 分页获取所有流动池列表
+func (dao *NftUtxoSetDAO) GetAllPoolsWithPagination(ctx context.Context, page, size int) ([]struct {
+	NftContractId   string `gorm:"column:nft_contract_id"`
+	CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+	TokenContractId string `gorm:"column:nft_icon"`
+}, int64, error) {
+	var results []struct {
+		NftContractId   string `gorm:"column:nft_contract_id"`
+		CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+		TokenContractId string `gorm:"column:nft_icon"`
+	}
+
+	// 计算总数量
+	var totalCount int64
+	countErr := dao.db.WithContext(ctx).
+		Table("TBC20721.nft_utxo_set").
+		Where("nft_holder_address = ?", "LP").
+		Count(&totalCount).Error
+
+	if countErr != nil {
+		return nil, 0, countErr
+	}
+
+	// 分页查询所有流动池
+	offset := page * size // page从0开始
+	err := dao.db.WithContext(ctx).
+		Table("TBC20721.nft_utxo_set").
+		Select("nft_contract_id, nft_create_timestamp, nft_icon").
+		Where("nft_holder_address = ?", "LP").
+		Offset(offset).
+		Limit(size).
+		Find(&results).Error
+
+	return results, totalCount, err
 }

@@ -39,3 +39,30 @@ type TBC20PoolListResponse struct {
 	PoolList       []TBC20PoolInfo `json:"pool_list"`        // 流动池列表
 	TotalPoolCount int64           `json:"total_pool_count"` // 总数量
 }
+
+// TBC20PoolPageRequest 分页获取所有流动池列表请求
+type TBC20PoolPageRequest struct {
+	Page int `uri:"page"`
+	Size int `uri:"size"`
+}
+
+// Validate 验证请求参数的合法性
+func (req *TBC20PoolPageRequest) Validate() error {
+	// 检查页码是否合法
+	if req.Page < 0 {
+		return fmt.Errorf("页码不能小于0")
+	}
+
+	// 检查每页大小是否合法
+	if req.Size <= 0 || req.Size > 100 {
+		return fmt.Errorf("每页大小必须在1到100之间")
+	}
+
+	return nil
+}
+
+// TBC20PoolPageResponse 分页获取所有流动池列表响应
+type TBC20PoolPageResponse struct {
+	TotalPoolCount int64           `json:"total_pool_count"` // 池总数
+	PoolList       []TBC20PoolInfo `json:"pool_list"`        // 流动池列表
+}
