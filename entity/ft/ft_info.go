@@ -40,5 +40,5 @@ type TBC20FTInfoResponse struct {
 	FtHoldersCount         int     `json:"ftHoldersCount"`         // FT持有者数量
 	FtIconUrl              string  `json:"ftIconUrl"`              // FT图标URL
 	FtCreateTimestamp      int     `json:"ftCreateTimestamp"`      // FT创建时间戳
-	FtTokenPrice           float64 `json:"ftTokenPrice"`           // FT代币价格
+	FtTokenPrice           string `json:"ftTokenPrice"`           // FT代币价格
 }

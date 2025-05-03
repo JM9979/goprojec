@@ -42,7 +42,7 @@ func (l *FtLogic) GetFtInfoByContractId(ctx context.Context, req *ft.FtInfoContr
 		FtHoldersCount:         ftToken.FtHoldersCount,
 		FtIconUrl:              ftToken.FtIconUrl,
 		FtCreateTimestamp:      ftToken.FtCreateTimestamp,
-		FtTokenPrice:           ftToken.FtTokenPrice,
+		FtTokenPrice:           fmt.Sprintf("%f", ftToken.FtTokenPrice),
 	}
 
 	log.InfoWithContextf(ctx, "FT信息查询成功: 合约ID=%s", req.ContractId)

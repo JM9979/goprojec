@@ -24,7 +24,7 @@ type FtTokenInfo struct {
 	FtDescription     string  `json:"ftDescription"`
 	FtCreatorAddress  string  `json:"ftCreatorAddress"`
 	FtCreateTimestamp int     `json:"ftCreateTimestamp"`
-	FtTokenPrice      float64 `json:"ftTokenPrice"`
+	FtTokenPrice      string  `json:"ftTokenPrice"`
 	FtHoldersCount    int     `json:"ftHoldersCount"`
 	FtIconUrl         string  `json:"ftIconUrl"`
 }

@@ -2,6 +2,7 @@ package ft
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"ginproject/entity/dbtable"
@@ -87,7 +88,7 @@ func (l *FtLogic) convertTokensToInfoList(ctx context.Context, tokens []*dbtable
 			FtDescription:     token.FtDescription,
 			FtCreatorAddress:  creatorAddress,
 			FtCreateTimestamp: token.FtCreateTimestamp,
-			FtTokenPrice:      token.FtTokenPrice,
+			FtTokenPrice:      fmt.Sprintf("%f", token.FtTokenPrice),
 			FtHoldersCount:    token.FtHoldersCount,
 			FtIconUrl:         token.FtIconUrl,
 		}
