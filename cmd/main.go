@@ -65,4 +65,6 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/ft/pool/history/pool/id/:pool_id/page/:page/size/:size", ftService.GetPoolHistoryByPoolId)
 	// 添加获取交易池列表的路由
 	apiGroup.GET("/ft/pool/list/page/:page/size/:size", ftService.GetPoolList)
+	// 添加获取地址持有的代币列表的路由
+	apiGroup.GET("/ft/tokens/held/by/address/:address", ftService.GetTokenListHeldByAddress)
 }

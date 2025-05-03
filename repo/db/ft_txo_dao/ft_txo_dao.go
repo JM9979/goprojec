@@ -208,3 +208,21 @@ func formatBalanceChange(balance int64) string {
 	}
 	return fmt.Sprintf("%d", balance)
 }
+
+// GetFtContractIdsByHolder 获取指定持有者持有的所有代币合约ID
+func (dao *FtTxoDAO) GetFtContractIdsByHolder(ctx context.Context, holderScript string) ([]string, error) {
+	var contractIds []string
+
+	// 查询指定持有者持有的且未花费的所有代币合约ID（去重）
+	err := dao.db.Model(&dbtable.FtTxoSet{}).
+		Distinct("ft_contract_id").
+		Where("ft_holder_combine_script = ? AND if_spend = ? AND ft_balance > 0", holderScript, false).
+		Pluck("ft_contract_id", &contractIds).Error
+
+	if err != nil {
+		log.ErrorWithContextf(ctx, "查询持有者的代币合约ID失败: %v", err)
+		return nil, err
+	}
+
+	return contractIds, nil
+}

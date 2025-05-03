@@ -115,3 +115,57 @@ type TBC20FTBalanceResponse struct {
 	// FT余额
 	FtBalance uint64 `json:"ftBalance"`
 }
+
+// TBC20TokenListHeldByAddressRequest 获取地址持有的代币列表请求
+type TBC20TokenListHeldByAddressRequest struct {
+	// 用户钱包地址
+	Address string `uri:"address" binding:"required"`
+}
+
+// GetCombineScript 获取地址对应的组合脚本
+func (req *TBC20TokenListHeldByAddressRequest) GetCombineScript() (string, error) {
+	pubKeyHash, err := utility.ConvertAddressToPublicKeyHash(req.Address)
+	if err != nil {
+		return "", err
+	}
+	return pubKeyHash, nil
+}
+
+// Validate 验证TBC20TokenListHeldByAddressRequest的参数
+func (req *TBC20TokenListHeldByAddressRequest) Validate() error {
+	// 检查地址是否为空
+	if req.Address == "" {
+		return fmt.Errorf("地址不能为空")
+	}
+
+	// 检查地址格式是否合法
+	if len(req.Address) < 6 {
+		return fmt.Errorf("地址格式不正确")
+	}
+
+	return nil
+}
+
+// TBC20TokenListHeldByAddressResponse 获取地址持有的代币列表响应
+type TBC20TokenListHeldByAddressResponse struct {
+	// 查询的地址
+	Address string `json:"address"`
+	// 地址持有的代币数量
+	TokenCount int `json:"token_count"`
+	// 代币列表
+	TokenList []TokenInfo `json:"token_list"`
+}
+
+// TokenInfo 代币信息
+type TokenInfo struct {
+	// FT合约ID
+	FtContractId string `json:"ft_contract_id"`
+	// FT小数位数
+	FtDecimal int `json:"ft_decimal"`
+	// FT余额
+	FtBalance uint64 `json:"ft_balance"`
+	// FT名称
+	FtName string `json:"ft_name"`
+	// FT符号
+	FtSymbol string `json:"ft_symbol"`
+}

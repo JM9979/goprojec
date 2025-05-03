@@ -253,7 +253,7 @@ func (s *FtService) GetFtTokenList(c *gin.Context) {
 }
 
 // DecodeFtTransactionHistory 解析FT交易历史
-// 路由: GET /v1/tbc/main/ft/decode/tx/history/{txid}
+// 路由: GET /v1/tbc/main/ft/decode/tx/history/:txid
 func (s *FtService) DecodeFtTransactionHistory(c *gin.Context) {
 	ctx := c.Request.Context()
 
@@ -272,6 +272,33 @@ func (s *FtService) DecodeFtTransactionHistory(c *gin.Context) {
 	if err != nil {
 		log.ErrorWithContextf(ctx, "处理FT交易解析失败: %v", err)
 		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "解析FT交易失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
+
+// GetTokenListHeldByAddress 获取地址持有的代币列表
+// 路由: GET /v1/tbc/main/ft/tokens/held/by/address/:address
+func (s *FtService) GetTokenListHeldByAddress(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.TBC20TokenListHeldByAddressRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取地址持有的代币列表请求: 地址=%s", req.Address)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetTokensListHeldByAddress(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理地址持有的代币列表查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询地址持有的代币列表失败"))
 		return
 	}
 
