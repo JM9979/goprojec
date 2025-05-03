@@ -107,6 +107,25 @@ func (dao *FtTokensDAO) GetFtDecimalByContractId(ctx context.Context, contractId
 	return token.FtDecimal, nil
 }
 
+// GetFtCodeScript 根据合约ID获取代币代码脚本
+func (dao *FtTokensDAO) GetFtCodeScript(ctx context.Context, contractId string) (string, error) {
+	var token dbtable.FtTokens
+
+	// 查询代币代码脚本
+	err := dao.db.Where("ft_contract_id = ?", contractId).Select("ft_code_script").First(&token).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			log.WarnWithContextf(ctx, "未找到合约ID对应的代币信息: %s", contractId)
+			return "", nil
+		}
+		log.ErrorWithContextf(ctx, "查询代币代码脚本失败: %v", err)
+		return "", err
+	}
+
+	log.InfoWithContextf(ctx, "成功获取合约ID[%s]的代币代码脚本", contractId)
+	return token.FtCodeScript, nil
+}
+
 // GetFtCodeScriptAndDecimal 根据合约ID获取代币代码脚本和精度
 func (dao *FtTokensDAO) GetFtCodeScriptAndDecimal(ctx context.Context, contractId string) (string, uint8, error) {
 	var token dbtable.FtTokens

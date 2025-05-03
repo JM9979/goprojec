@@ -73,3 +73,40 @@ func DecodeTxHashAsync(ctx context.Context, txid string) <-chan AsyncResult {
 
 	return resultChan
 }
+
+// DecodeTx 根据交易哈希获取交易详情
+// 此方法通过区块链节点RPC接口查询指定交易哈希的详细信息
+// 返回的交易信息包括输入输出、脚本、金额等详细数据
+func DecodeTx(ctx context.Context, txid string) (*blockchain.TransactionResponse, error) {
+	// 参数验证
+	if txid == "" {
+		log.ErrorWithContextf(ctx, "解析交易失败: 交易ID不能为空")
+		return nil, fmt.Errorf("交易ID不能为空")
+	}
+
+	// 记录开始调用日志
+	log.InfoWithContextf(ctx, "开始查询交易: %s", txid)
+
+	// 调用区块链节点RPC
+	result, err := CallRPC("getrawtransaction", []interface{}{txid, 1}, false)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "查询交易失败: %s, 错误: %v", txid, err)
+		return nil, fmt.Errorf("解析交易失败: %w", err)
+	}
+
+	// 将返回结果转换为TransactionResponse结构
+	var tx blockchain.TransactionResponse
+	resultBytes, err := json.Marshal(result)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "序列化交易结果失败: %v", err)
+		return nil, fmt.Errorf("解析RPC响应失败: %w", err)
+	}
+
+	if err := json.Unmarshal(resultBytes, &tx); err != nil {
+		log.ErrorWithContextf(ctx, "解析交易数据失败: %s, 错误: %v", txid, err)
+		return nil, fmt.Errorf("解析交易数据失败: %w", err)
+	}
+
+	log.InfoWithContextf(ctx, "成功查询交易: %s, 确认数: %d", txid, tx.Confirmations)
+	return &tx, nil
+}

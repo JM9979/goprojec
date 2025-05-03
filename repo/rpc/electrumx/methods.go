@@ -290,3 +290,32 @@ type AsyncHistoryResult struct {
 	Result electrumx.ElectrumXHistoryResponse
 	Error  error
 }
+
+// GetScriptHistory 获取脚本历史
+func GetScriptHistory(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.ErrorWithContextf(ctx, "GetScriptHistory失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.InfoWithContextf(ctx, "开始获取脚本哈希历史: %s", scriptHash)
+
+	// 调用RPC方法
+	result, err := CallMethod("blockchain.scripthash.get_history", []interface{}{scriptHash})
+	if err != nil {
+		log.ErrorWithContextf(ctx, "获取脚本哈希历史失败: %v", err)
+		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
+	}
+
+	// 解析响应
+	var history electrumx.ElectrumXHistoryResponse
+	if err := json.Unmarshal(result, &history); err != nil {
+		log.ErrorWithContextf(ctx, "解析脚本哈希历史失败: %v, 原始数据: %s", err, string(result))
+		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
+	}
+
+	log.InfoWithContextf(ctx, "成功获取脚本哈希历史, 共 %d 条记录", len(history))
+	return history, nil
+}
