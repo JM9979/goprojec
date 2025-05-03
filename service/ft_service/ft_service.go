@@ -333,3 +333,31 @@ func (s *FtService) GetTokenHistoryByContractId(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// GetPoolHistoryByPoolId 获取池子历史记录
+// 路由: GET /v1/tbc/main/ft/pool/history/pool/id/{pool_id}/page/{page}/size/{size}
+func (s *FtService) GetPoolHistoryByPoolId(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.TBC20PoolHistoryRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取池子历史记录请求: 池子ID=%s, 页码=%d, 每页大小=%d",
+		req.PoolId, req.Page, req.Size)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetPoolHistoryByPoolId(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理池子历史记录查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询池子历史记录失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}

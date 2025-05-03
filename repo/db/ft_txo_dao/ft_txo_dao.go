@@ -2,8 +2,11 @@ package ft_txo_dao
 
 import (
 	"context"
+	"fmt"
 
 	"ginproject/entity/dbtable"
+	"ginproject/entity/ft"
+	"ginproject/middleware/log"
 	"ginproject/repo/db"
 
 	"gorm.io/gorm"
@@ -137,4 +140,71 @@ func (dao *FtTxoDAO) GetFtUtxoInfo(ctx context.Context, txid string, vout int) (
 	}
 
 	return result.FtBalance, result.FtHolderCombineScript, result.FtContractId, nil
+}
+
+// GetPoolHistoryByPoolId 根据池子ID查询历史记录
+func (dao *FtTxoDAO) GetPoolHistoryByPoolId(ctx context.Context, poolId string, page int, size int) ([]ft.TBC20PoolHistoryResponse, error) {
+	log.InfoWithContextf(ctx, "查询池子历史记录: 池子ID=%s, 页码=%d, 每页大小=%d", poolId, page, size)
+
+	var results []ft.TBC20PoolHistoryResponse
+
+	// 使用联表查询获取更完整的池子历史记录信息
+	type Result struct {
+		UtxoTxid              string
+		FtHolderCombineScript string
+		FtContractId          string
+		FtBalance             uint64
+		UtxoBalance           uint64
+		FtName                string
+		FtDecimal             int
+	}
+
+	var queryResults []Result
+
+	// 联表查询ft_txo_set和ft_tokens表，获取代币名称和精度
+	err := dao.db.Table("TBC20721.ft_txo_set as t1").
+		Select("t1.utxo_txid, t1.ft_holder_combine_script, t1.ft_contract_id, t1.ft_balance, t1.utxo_balance, t2.ft_name, t2.ft_decimal").
+		Joins("left join TBC20721.ft_tokens as t2 on t1.ft_contract_id = t2.ft_contract_id").
+		Where("t1.utxo_txid = ? OR t1.ft_holder_combine_script = ?", poolId, poolId).
+		Order("t1.id DESC").
+		Offset(page * size).
+		Limit(size).
+		Scan(&queryResults).Error
+
+	if err != nil {
+		log.ErrorWithContextf(ctx, "查询池子历史记录失败: %v", err)
+		return nil, err
+	}
+
+	// 转换为响应类型
+	for _, result := range queryResults {
+		// 根据实际逻辑填充池子历史记录
+		history := ft.TBC20PoolHistoryResponse{
+			Txid:                        result.UtxoTxid,
+			PoolId:                      poolId,
+			ExchangeAddress:             result.FtHolderCombineScript,
+			FtLpBalanceChange:           formatBalanceChange(int64(result.FtBalance / 2)), // LP代币通常是总量的一半
+			TokenPairAId:                "TBC",
+			TokenPairAName:              "TBC",
+			TokenPairADecimal:           6, // TBC默认精度
+			TokenPairAPoolBalanceChange: formatBalanceChange(int64(result.UtxoBalance)),
+			TokenPairBId:                result.FtContractId,
+			TokenPairBName:              result.FtName,
+			TokenPairBDecimal:           result.FtDecimal,
+			TokenPairBPoolBalanceChange: formatBalanceChange(int64(result.FtBalance)),
+		}
+
+		results = append(results, history)
+	}
+
+	log.InfoWithContextf(ctx, "查询池子历史记录成功: 池子ID=%s, 记录数=%d", poolId, len(results))
+	return results, nil
+}
+
+// formatBalanceChange 格式化余额变化为字符串，添加正负号
+func formatBalanceChange(balance int64) string {
+	if balance > 0 {
+		return "+" + fmt.Sprintf("%d", balance)
+	}
+	return fmt.Sprintf("%d", balance)
 }

@@ -392,3 +392,63 @@ func ConvertP2msUnlockScriptToAddress(unlockScript string) (string, error) {
 
 	return msAddress, nil
 }
+
+// GetPoolBalanceFromTapeASM 从tape_asm获取池余额
+// 输入: tape_asm字符串
+// 返回: FT LP余额、FT A余额和TBC余额
+func GetPoolBalanceFromTapeASM(tapeAsm string) (int64, int64, int64, error) {
+	if tapeAsm == "" {
+		return 0, 0, 0, fmt.Errorf("tape_asm不能为空")
+	}
+
+	// 将tape_asm拆分为列表
+	ftBalanceTapeList := strings.Split(tapeAsm, " ")
+
+	// 检查列表长度是否足够
+	if len(ftBalanceTapeList) < 4 {
+		return 0, 0, 0, fmt.Errorf("无效的tape_asm格式: %s", tapeAsm)
+	}
+
+	complexBalance := ftBalanceTapeList[3]
+
+	// 检查复杂余额字符串长度是否至少为48
+	if len(complexBalance) < 48 {
+		return 0, 0, 0, fmt.Errorf("复杂余额字符串长度不足: %s", complexBalance)
+	}
+
+	// 提取并解析FT LP余额（前16个字符，按2个字符反转）
+	ftLpBalanceHex := reverseByteOrder(complexBalance[0:16])
+	var ftLpBalance int64
+	fmt.Sscanf(ftLpBalanceHex, "%x", &ftLpBalance)
+
+	// 提取并解析FT A余额（中间16个字符，按2个字符反转）
+	ftABalanceHex := reverseByteOrder(complexBalance[16:32])
+	var ftABalance int64
+	fmt.Sscanf(ftABalanceHex, "%x", &ftABalance)
+
+	// 提取并解析TBC余额（末尾16个字符，按2个字符反转）
+	tbcBalanceHex := reverseByteOrder(complexBalance[32:48])
+	var tbcBalance int64
+	fmt.Sscanf(tbcBalanceHex, "%x", &tbcBalance)
+
+	return ftLpBalance, ftABalance, tbcBalance, nil
+}
+
+// reverseByteOrder 将十六进制字符串按2个字符为一组反转顺序
+func reverseByteOrder(hexStr string) string {
+	bytePairs := make([]string, 0, len(hexStr)/2)
+	for i := 0; i < len(hexStr); i += 2 {
+		end := i + 2
+		if end > len(hexStr) {
+			end = len(hexStr)
+		}
+		bytePairs = append(bytePairs, hexStr[i:end])
+	}
+
+	// 反转字节顺序
+	for i, j := 0, len(bytePairs)-1; i < j; i, j = i+1, j-1 {
+		bytePairs[i], bytePairs[j] = bytePairs[j], bytePairs[i]
+	}
+
+	return strings.Join(bytePairs, "")
+}

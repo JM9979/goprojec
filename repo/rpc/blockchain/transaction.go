@@ -110,3 +110,60 @@ func DecodeTx(ctx context.Context, txid string) (*blockchain.TransactionResponse
 	log.InfoWithContextf(ctx, "成功查询交易: %s, 确认数: %d", txid, tx.Confirmations)
 	return &tx, nil
 }
+
+// DecodeRawTransaction 根据交易哈希获取原始交易详情
+// 此方法直接返回节点返回的原始结果，不进行结构体转换
+// 等同于Python中的decode_tx_hash函数
+func DecodeRawTransaction(ctx context.Context, txid string) (interface{}, error) {
+	// 参数验证
+	if txid == "" {
+		log.ErrorWithContextf(ctx, "解析交易失败: 交易ID不能为空")
+		return nil, fmt.Errorf("交易ID不能为空")
+	}
+
+	// 记录开始调用日志
+	log.InfoWithContextf(ctx, "开始查询原始交易: %s", txid)
+
+	// 调用区块链节点RPC
+	result, err := CallRPC("getrawtransaction", []interface{}{txid, 1}, false)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "查询原始交易失败: %s, 错误: %v", txid, err)
+		return nil, fmt.Errorf("解析交易失败: %w", err)
+	}
+
+	log.InfoWithContextf(ctx, "成功查询原始交易: %s", txid)
+	return result, nil
+}
+
+// DecodeRawTransactionAsync 异步获取原始交易详情
+// 这是DecodeRawTransaction的异步版本
+func DecodeRawTransactionAsync(ctx context.Context, txid string) <-chan AsyncResult {
+	resultChan := make(chan AsyncResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		// 调用同步方法
+		result, err := DecodeRawTransaction(ctx, txid)
+
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  ctx.Err(),
+			}
+			return
+		default:
+			// 继续执行
+		}
+
+		// 将结果发送到通道
+		resultChan <- AsyncResult{
+			Result: result,
+			Error:  err,
+		}
+	}()
+
+	return resultChan
+}
