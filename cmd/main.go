@@ -9,8 +9,7 @@ import (
 	"ginproject/service"
 	address_service "ginproject/service/address_service"
 	ft_service "ginproject/service/ft_service"
-	tbcapi "ginproject/service/tbc_api"
-
+	health_service "ginproject/service/health_service"
 	"github.com/gin-gonic/gin"
 )
 
@@ -43,7 +42,7 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup := r.Group("/v1/tbc/main")
 
 	// 添加健康检查端点
-	apiGroup.GET("/health", tbcapi.NewTbcApiService().HealthCheck)
+	apiGroup.GET("/health", health_service.NewHealthService().HealthCheck)
 
 	// 注册FT服务API
 	ftService := ft_service.NewFtService()

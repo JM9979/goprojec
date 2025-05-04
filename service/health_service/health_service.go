@@ -1,4 +1,4 @@
-package tbcapi
+package health
 
 import (
 	"net/http"
@@ -8,17 +8,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// TbcApiService TBC API服务
-type TbcApiService struct {
+// HealthService 健康检查服务
+type HealthService struct {
 }
 
-// NewTbcApiService 创建TbcApiService实例
-func NewTbcApiService() *TbcApiService {
-	return &TbcApiService{}
+// NewHealthService 创建HealthService实例
+func NewHealthService() *HealthService {
+	return &HealthService{}
 }
 
 // HealthCheck 健康检查
-func (s *TbcApiService) HealthCheck(c *gin.Context) {
+func (s *HealthService) HealthCheck(c *gin.Context) {
 	ctx := c.Request.Context()
 	log.InfoWithContext(ctx, "HealthCheck")
 	c.JSON(http.StatusOK, gin.H{
