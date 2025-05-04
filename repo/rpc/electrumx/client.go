@@ -1,10 +1,13 @@
 package electrumx
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -173,36 +176,68 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 		return nil, fmt.Errorf("发送RPC请求失败: %w", err)
 	}
 
-	// 读取响应（最大4096字节，应该足够大多数响应）
-	buf := make([]byte, 4096)
-	n, err := c.conn.Read(buf)
-	if err != nil {
-		log.Errorf("读取RPC响应失败: %v", err)
-		// 连接可能已断开，尝试断开
-		c.Disconnect()
-		return nil, fmt.Errorf("读取RPC响应失败: %w", err)
-	}
+	// 使用bufio.Reader读取完整响应
+	reader := bufio.NewReader(c.conn)
 
-	// 解析响应
-	var resp RPCResponse
-	if err := json.Unmarshal(buf[:n], &resp); err != nil {
-		log.Errorf("解析RPC响应失败: %v, 响应内容: %s", err, string(buf[:n]))
-		return nil, fmt.Errorf("解析RPC响应失败: %w", err)
-	}
+	// 使用bytes.Buffer收集响应数据
+	var responseBuffer bytes.Buffer
 
-	// 检查ID是否匹配
-	if resp.ID != id {
-		log.Errorf("RPC响应ID不匹配: 期望=%d, 实际=%d", id, resp.ID)
-		return nil, fmt.Errorf("RPC响应ID不匹配")
-	}
+	// 最大允许的响应大小(10MB)，防止异常大的响应
+	const maxResponseSize = 10 * 1024 * 1024
 
-	// 检查错误
-	if resp.Error != nil {
-		log.Warnf("RPC调用错误: %s (代码: %d)", resp.Error.Message, resp.Error.Code)
-		return nil, fmt.Errorf("RPC调用错误: %s (代码: %d)", resp.Error.Message, resp.Error.Code)
-	}
+	// 循环读取响应直到获取完整JSON或达到大小限制
+	for {
+		// 检查是否超出大小限制
+		if responseBuffer.Len() > maxResponseSize {
+			c.Disconnect()
+			log.Errorf("RPC响应超过大小限制(%dMB)", maxResponseSize/1024/1024)
+			return nil, fmt.Errorf("RPC响应数据过大，超过%dMB限制", maxResponseSize/1024/1024)
+		}
 
-	return resp.Result, nil
+		// 读取一行数据(ElectrumX响应通常以换行符结束)
+		line, err := reader.ReadBytes('\n')
+		if err != nil && err != io.EOF {
+			log.Errorf("读取RPC响应失败: %v", err)
+			c.Disconnect()
+			return nil, fmt.Errorf("读取RPC响应失败: %w", err)
+		}
+
+		// 将读取的数据添加到缓冲区
+		if len(line) > 0 {
+			responseBuffer.Write(line)
+		}
+
+		// 尝试解析已收集的数据
+		responseData := responseBuffer.Bytes()
+		var resp RPCResponse
+
+		if jsonErr := json.Unmarshal(responseData, &resp); jsonErr == nil {
+			// 检查ID是否匹配
+			if resp.ID == id {
+				// 检查错误
+				if resp.Error != nil {
+					log.Warnf("RPC调用错误: %s (代码: %d)", resp.Error.Message, resp.Error.Code)
+					return nil, fmt.Errorf("RPC调用错误: %s (代码: %d)", resp.Error.Message, resp.Error.Code)
+				}
+
+				log.Debugf("成功接收ElectrumX RPC响应: method=%s, 大小=%d字节", method, responseBuffer.Len())
+				return resp.Result, nil
+			}
+		}
+
+		// 如果遇到EOF且尚未解析成功，说明连接已关闭但数据可能不完整
+		if err == io.EOF {
+			// 记录截断的响应数据(最多500字节)
+			respData := responseBuffer.String()
+			if len(respData) > 500 {
+				respData = respData[:500] + "... [截断]"
+			}
+
+			log.Errorf("连接关闭但未收到完整响应: %s", respData)
+			c.Disconnect()
+			return nil, fmt.Errorf("连接关闭但未收到完整响应")
+		}
+	}
 }
 
 // CallRPCAsync 异步调用ElectrumX RPC方法

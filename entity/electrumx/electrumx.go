@@ -19,3 +19,24 @@ type Utxo struct {
 
 // UtxoResponse 表示从ElectrumX获取的UTXO响应
 type UtxoResponse []Utxo
+
+// AddressHistoryResponse 表示地址历史交易响应
+type AddressHistoryResponse struct {
+	Address      string        `json:"address"`       // 钱包地址
+	Script       string        `json:"script"`        // 地址对应的脚本哈希
+	HistoryCount int           `json:"history_count"` // 历史交易总数
+	Result       []HistoryItem `json:"result"`        // 历史交易列表
+}
+
+// HistoryItem 表示单个历史交易记录
+type HistoryItem struct {
+	BalanceChange      string   `json:"balance_change"`       // 余额变动
+	BanlanceChange     string   `json:"banlance_change"`      // 余额变动（字段重复，保持与接口规范一致）
+	TxHash             string   `json:"tx_hash"`              // 交易哈希
+	SenderAddresses    []string `json:"sender_addresses"`     // 发送方地址列表
+	RecipientAddresses []string `json:"recipient_addresses"`  // 接收方地址列表
+	Fee                string   `json:"fee"`                  // 交易费用
+	TimeStamp          int64    `json:"time_stamp,omitempty"` // 交易时间戳（可选）
+	UtcTime            string   `json:"utc_time"`             // UTC时间格式
+	TxType             string   `json:"tx_type,omitempty"`    // 交易类型（可选）
+}

@@ -44,7 +44,7 @@ func (l *FtLogic) GetTokenHistory(ctx context.Context, req *ft.FtTokenHistoryReq
 		req.FtContractId, ftCodeScriptHash)
 
 	// 获取脚本历史交易列表
-	ftHistoryTxs, err := repoElectrumx.GetScriptHistory(ctx, ftCodeScriptHash)
+	ftHistoryTxs, err := repoElectrumx.GetScriptHashHistoryAsync2(ctx, ftCodeScriptHash)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取脚本历史失败: %v", err)
 		return nil, fmt.Errorf("获取脚本历史失败: %v", err)

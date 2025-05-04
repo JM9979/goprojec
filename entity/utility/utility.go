@@ -523,3 +523,111 @@ func AddressToScriptHash(address string) (string, error) {
 
 	return scriptHash, nil
 }
+
+// ValidateAddress 验证比特币地址的格式合法性
+func ValidateAddress(address string) (bool, error) {
+	if address == "" {
+		return false, fmt.Errorf("地址不能为空")
+	}
+
+	// 验证比特币地址的正则表达式
+	// 支持P2PKH, P2SH和Bech32格式
+	regexP2PKH := regexp.MustCompile(`^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$`)
+	regexP2SH := regexp.MustCompile(`^[2][a-km-zA-HJ-NP-Z1-9]{25,34}$`)
+	regexBech32 := regexp.MustCompile(`^(bc1|tb1)[a-zA-HJ-NP-Z0-9]{25,90}$`)
+
+	if regexP2PKH.MatchString(address) || regexP2SH.MatchString(address) || regexBech32.MatchString(address) {
+		return true, nil
+	}
+
+	return false, fmt.Errorf("无效的比特币地址格式")
+}
+
+// ConvertP2msScriptToMsAddress 将P2MS脚本转换为多签名地址
+// 输入: P2MS脚本字符串
+// 返回: 多签名地址或错误
+func ConvertP2msScriptToMsAddress(script string) (string, error) {
+	if script == "" {
+		return "", fmt.Errorf("脚本不能为空")
+	}
+
+	// 将脚本拆分为列表
+	scriptParts := strings.Split(script, " ")
+
+	// 验证脚本格式
+	if len(scriptParts) < 3 {
+		return "", fmt.Errorf("无效的脚本格式: '%s'", script)
+	}
+
+	// 查找 OP_CHECKMULTISIG 位置
+	checkmultisigIndex := -1
+	for i, part := range scriptParts {
+		if part == "OP_CHECKMULTISIG" {
+			checkmultisigIndex = i
+			break
+		}
+	}
+
+	if checkmultisigIndex == -1 {
+		return "", fmt.Errorf("无效的多签名脚本: 缺少 OP_CHECKMULTISIG")
+	}
+
+	// 提取所需签名数量和公钥总数
+	pubkeyNeededCount := 0
+	if pubkeyNeededCountStr := scriptParts[0]; pubkeyNeededCountStr != "" {
+		fmt.Sscanf(pubkeyNeededCountStr, "%d", &pubkeyNeededCount)
+	}
+
+	pubkeyTotalCount := 0
+	if pubkeyTotalCountStr := scriptParts[checkmultisigIndex-1]; pubkeyTotalCountStr != "" {
+		fmt.Sscanf(pubkeyTotalCountStr, "%d", &pubkeyTotalCount)
+	}
+
+	// 验证签名数量
+	if pubkeyNeededCount <= 0 || pubkeyTotalCount <= 0 || pubkeyNeededCount > pubkeyTotalCount || pubkeyTotalCount > 15 {
+		return "", fmt.Errorf("无效的签名配置: 需要 %d, 总共 %d", pubkeyNeededCount, pubkeyTotalCount)
+	}
+
+	// 提取公钥
+	pubkeys := make([]string, 0, pubkeyTotalCount)
+	for i := 1; i < checkmultisigIndex-1; i++ {
+		// 验证是否为有效的公钥(通常为66字符的十六进制字符串)
+		if len(scriptParts[i]) == 66 || len(scriptParts[i]) == 130 {
+			pubkeys = append(pubkeys, scriptParts[i])
+		}
+	}
+
+	// 验证提取的公钥数量
+	if len(pubkeys) != pubkeyTotalCount {
+		return "", fmt.Errorf("公钥数量不匹配: 提取到 %d, 期望 %d", len(pubkeys), pubkeyTotalCount)
+	}
+
+	// 连接所有公钥
+	pubkeysStr := strings.Join(pubkeys, "")
+
+	// 将公钥十六进制字符串转换为字节
+	pubkeysBytes, err := hex.DecodeString(pubkeysStr)
+	if err != nil {
+		return "", fmt.Errorf("无效的公钥十六进制数据: %v", err)
+	}
+
+	// 计算SHA256哈希
+	sha256Hash := sha256.Sum256(pubkeysBytes)
+
+	// 计算RIPEMD160哈希
+	ripemd160Hasher := ripemd160.New()
+	_, err = ripemd160Hasher.Write(sha256Hash[:])
+	if err != nil {
+		return "", fmt.Errorf("计算RIPEMD160哈希时出错: %v", err)
+	}
+
+	pubkeysHash := ripemd160Hasher.Sum(nil)
+
+	// 计算版本字节 (pubkeyNeededCount << 4) | (pubkeyTotalCount & 0x0f)
+	versionByte := byte((pubkeyNeededCount << 4) | (pubkeyTotalCount & 0x0f))
+
+	// 使用Base58Check编码
+	msAddress := base58.CheckEncode(pubkeysHash, versionByte)
+
+	return msAddress, nil
+}

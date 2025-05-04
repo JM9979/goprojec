@@ -294,35 +294,6 @@ type AsyncHistoryResult struct {
 	Error  error
 }
 
-// GetScriptHistory 获取脚本历史
-func GetScriptHistory(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
-	// 参数校验
-	if len(scriptHash) == 0 {
-		log.ErrorWithContextf(ctx, "GetScriptHistory失败: scriptHash不能为空")
-		return nil, fmt.Errorf("scriptHash不能为空")
-	}
-
-	// 记录开始调用日志
-	log.InfoWithContextf(ctx, "开始获取脚本哈希历史: %s", scriptHash)
-
-	// 调用RPC方法
-	result, err := CallMethod("blockchain.scripthash.get_history", []interface{}{scriptHash})
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取脚本哈希历史失败: %v", err)
-		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
-	}
-
-	// 解析响应
-	var history electrumx.ElectrumXHistoryResponse
-	if err := json.Unmarshal(result, &history); err != nil {
-		log.ErrorWithContextf(ctx, "解析脚本哈希历史失败: %v, 原始数据: %s", err, string(result))
-		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
-	}
-
-	log.InfoWithContextf(ctx, "成功获取脚本哈希历史, 共 %d 条记录", len(history))
-	return history, nil
-}
-
 // GetListUnspent 获取指定脚本哈希的未花费交易输出
 func GetListUnspent(scriptHash string) (electrumx.UtxoResponse, error) {
 	// 参数校验
@@ -439,4 +410,105 @@ func ConvertAddressToScript(address string) (string, error) {
 	}
 
 	return scriptHash, nil
+}
+
+// CallElectrumXRPC 通用的ElectrumX RPC调用函数，支持上下文控制
+func CallElectrumXRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
+	// 创建结果通道
+	resultChan := make(chan struct {
+		result json.RawMessage
+		err    error
+	}, 1)
+
+	// 在goroutine中执行调用，避免阻塞
+	go func() {
+		// 记录开始调用日志
+		log.InfoWithContext(ctx, "开始调用ElectrumX RPC",
+			zap.String("method", method),
+			zap.Any("params", params))
+
+		// 获取客户端
+		client, err := GetDefaultClient()
+		if err != nil {
+			log.ErrorWithContext(ctx, "获取ElectrumX客户端失败",
+				zap.String("method", method),
+				zap.Error(err))
+			resultChan <- struct {
+				result json.RawMessage
+				err    error
+			}{nil, fmt.Errorf("获取ElectrumX客户端失败: %w", err)}
+			return
+		}
+
+		// 执行RPC调用
+		result, err := client.CallRPC(method, params)
+
+		// 发送结果到通道
+		resultChan <- struct {
+			result json.RawMessage
+			err    error
+		}{result, err}
+	}()
+
+	// 等待结果或上下文取消
+	select {
+	case <-ctx.Done():
+		// 上下文已取消（超时或其他原因）
+		log.WarnWithContext(ctx, "ElectrumX RPC调用已取消",
+			zap.String("method", method),
+			zap.Error(ctx.Err()))
+		return nil, ctx.Err()
+	case result := <-resultChan:
+		// 收到结果
+		if result.err != nil {
+			log.ErrorWithContext(ctx, "ElectrumX RPC调用失败",
+				zap.String("method", method),
+				zap.Error(result.err))
+			return nil, result.err
+		}
+
+		// 记录成功调用
+		log.InfoWithContext(ctx, "ElectrumX RPC调用成功",
+			zap.String("method", method),
+			zap.Int("responseSize", len(result.result)))
+		return result.result, nil
+	}
+}
+
+// GetScriptHashHistoryAsync2 使用增强的方式异步获取指定脚本哈希的交易历史
+func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
+	// 参数校验
+	if scriptHash == "" {
+		log.ErrorWithContext(ctx, "脚本哈希不能为空")
+		return nil, ErrEmptyScriptHash
+	}
+
+	// 记录调用开始
+	log.InfoWithContext(ctx, "开始获取脚本哈希历史",
+		zap.String("scriptHash", scriptHash))
+
+	// 通过新的通用调用函数执行RPC请求
+	result, err := CallElectrumXRPC(ctx, "blockchain.scripthash.get_history", []interface{}{scriptHash})
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取脚本哈希历史失败",
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
+	}
+
+	// 解析响应数据
+	var history electrumx.ElectrumXHistoryResponse
+	if err := json.Unmarshal(result, &history); err != nil {
+		log.ErrorWithContext(ctx, "解析脚本哈希历史失败",
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
+	}
+
+	// 记录成功获取
+	log.InfoWithContext(ctx, "成功获取脚本哈希历史",
+		zap.String("scriptHash", scriptHash),
+		zap.Int("recordCount", len(history)))
+
+	return history, nil
 }
