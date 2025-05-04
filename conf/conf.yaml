@@ -6,13 +6,26 @@ log:
   path: ./logs/${server.name}.log
   level: info
 
-# 数据库配置示例
-# database:
-#   host: "localhost"
-#   port: 3306
-#   username: "root"
-#   password: "password"
-#   dbname: "mydatabase"
-#   charset: "utf8mb4"
-#   maxidleconns: 10
-#   maxopenconns: 100 
+# 数据库配置
+db:
+  host: "develope.tbcdev.xyz"
+  port: 3306
+  username: "root"
+  password: "mysql149"
+  database: "TBC20721"
+  charset: "utf8mb4"
+  maxidleconns: 10
+  maxopenconns: 100
+
+# TBCNode RPC认证配置
+tbcnode:
+  url: "http://develope.tbcdev.xyz:8332"
+  user: "tbcuser"
+  password: "randompasswd" 
+
+# ElectrumX RPC配置
+electrumx:
+  host: "develope.tbcdev.xyz"
+  port: 50001
+  timeout: 10 # 连接超时时间(秒)
+  retry_count: 3 # 重试次数 

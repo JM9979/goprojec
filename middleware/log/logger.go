@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"ginproject/entity/config"
 
@@ -25,12 +26,82 @@ const (
 	ErrorLevel Level = "Error"
 )
 
+// 创建异步写入器，带有缓冲区
+func getAsyncWriter(ws zapcore.WriteSyncer, bufferSize int) zapcore.WriteSyncer {
+	if bufferSize <= 0 {
+		// 如果缓冲区大小无效，直接返回原始的WriteSyncer
+		return ws
+	}
+
+	buffer := make(chan []byte, bufferSize)
+	writer := &asyncWriter{
+		ws:     ws,
+		buffer: buffer,
+	}
+
+	// 启动异步写入协程
+	go writer.run()
+
+	return writer
+}
+
+// asyncWriter 异步日志写入器
+type asyncWriter struct {
+	ws     zapcore.WriteSyncer
+	buffer chan []byte
+}
+
+// Write 实现WriteSyncer接口的Write方法
+func (w *asyncWriter) Write(p []byte) (int, error) {
+	// 创建一个副本，避免数据竞争
+	b := make([]byte, len(p))
+	copy(b, p)
+
+	// 尝试将数据发送到缓冲通道
+	select {
+	case w.buffer <- b:
+		// 成功加入缓冲区
+	default:
+		// 缓冲区已满，直接写入，避免丢失日志
+		return w.ws.Write(p)
+	}
+
+	return len(p), nil
+}
+
+// Sync 实现WriteSyncer接口的Sync方法
+func (w *asyncWriter) Sync() error {
+	return w.ws.Sync()
+}
+
+// run 异步写入循环
+func (w *asyncWriter) run() {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case p := <-w.buffer:
+			// 写入日志数据
+			_, err := w.ws.Write(p)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "异步日志写入失败: %v\n", err)
+			}
+		case <-ticker.C:
+			// 定时刷新，确保数据被写入磁盘
+			w.ws.Sync()
+		}
+	}
+}
+
 // InitLogger 使用AppConfig初始化日志
 func InitLogger(cfg *config.LogConfig, serverName string) error {
 	if cfg.Path != "" {
 		if err := os.MkdirAll(filepath.Dir(cfg.Path), 0755); err != nil {
 			return fmt.Errorf("创建日志目录失败: %w", err)
 		}
+	} else {
+		return fmt.Errorf("未配置日志路径，日志初始化失败")
 	}
 
 	// 配置zapcore
@@ -51,31 +122,25 @@ func InitLogger(cfg *config.LogConfig, serverName string) error {
 	// 配置日志输出
 	var cores []zapcore.Core
 
-	// 控制台输出
-	consoleEncoder := zapcore.NewJSONEncoder(encoderConfig)
-	consoleCore := zapcore.NewCore(
-		consoleEncoder,
-		zapcore.AddSync(os.Stdout),
+	// 文件输出
+	fileWriter := &lumberjack.Logger{
+		Filename:   cfg.Path,
+		MaxSize:    100, // MB
+		MaxBackups: 3,
+		MaxAge:     7, // days
+		Compress:   true,
+	}
+
+	// 创建异步写入器，缓冲区大小为8192
+	asyncFileWriter := getAsyncWriter(zapcore.AddSync(fileWriter), 8192)
+
+	fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
+	fileCore := zapcore.NewCore(
+		fileEncoder,
+		asyncFileWriter,
 		getZapLevel(Level(cfg.Level)),
 	)
-	cores = append(cores, consoleCore)
-
-	// 文件输出
-	if cfg.Path != "" {
-		fileWriter := &lumberjack.Logger{
-			Filename:   cfg.Path,
-			MaxSize:    100, // MB
-			MaxBackups: 3,
-			MaxAge:     7, // days
-		}
-		fileEncoder := zapcore.NewJSONEncoder(encoderConfig)
-		fileCore := zapcore.NewCore(
-			fileEncoder,
-			zapcore.AddSync(fileWriter),
-			getZapLevel(Level(cfg.Level)),
-		)
-		cores = append(cores, fileCore)
-	}
+	cores = append(cores, fileCore)
 
 	// 创建logger
 	core := zapcore.NewTee(cores...)
@@ -105,55 +170,95 @@ func getZapLevel(level Level) zapcore.Level {
 }
 
 // 基础日志接口
-func Debug(msg string, fields ...zap.Field) {
+func Debug(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Debug(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Debug(msg)
 	}
 }
 
-func Info(msg string, fields ...zap.Field) {
+func Info(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Info(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Info(msg)
 	}
 }
 
-func Warn(msg string, fields ...zap.Field) {
+func Warn(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Warn(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Warn(msg)
 	}
 }
 
-func Error(msg string, fields ...zap.Field) {
+func Error(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Error(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Error(msg)
 	}
 }
 
 // WithContext相关的日志方法
-func DebugWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func DebugWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Debug(msg, fields...)
 	}
 }
 
-func InfoWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func InfoWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Info(msg, fields...)
 	}
 }
 
-func WarnWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func WarnWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Warn(msg, fields...)
 	}
 }
 
-func ErrorWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func ErrorWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Error(msg, fields...)
 	}
 }
@@ -218,16 +323,19 @@ func ErrorWithContextf(ctx context.Context, format string, args ...interface{}) 
 
 // appendTraceFields 添加追踪相关字段
 func appendTraceFields(ctx context.Context, fields ...zap.Field) []zap.Field {
+	result := make([]zap.Field, 0, len(fields)+2) // 预分配容量为当前fields加上最多两个trace字段
+	result = append(result, fields...)            // 添加已有的fields
+
 	if span := trace.SpanFromContext(ctx); span != nil {
 		spanContext := span.SpanContext()
 		if spanContext.HasTraceID() {
-			fields = append(fields, zap.String("trace_id", spanContext.TraceID().String()))
+			result = append(result, zap.String("trace_id", spanContext.TraceID().String()))
 		}
 		if spanContext.HasSpanID() {
-			fields = append(fields, zap.String("span_id", spanContext.SpanID().String()))
+			result = append(result, zap.String("span_id", spanContext.SpanID().String()))
 		}
 	}
-	return fields
+	return result
 }
 
 // Field 创建一个zap.Field，方便使用

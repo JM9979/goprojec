@@ -72,6 +72,16 @@ func GetDBConfig() *config.DBConfig {
 	return &GetManager().GetConfig().DB
 }
 
+// GetTBCNodeConfig 获取TBCNode配置
+func GetTBCNodeConfig() *config.TBCNodeConfig {
+	return &GetManager().GetConfig().TBCNode
+}
+
+// GetElectrumXConfig 获取ElectrumX配置
+func GetElectrumXConfig() *config.ElectrumXConfig {
+	return &GetManager().GetConfig().ElectrumX
+}
+
 // 以下是一些常用配置项的快捷访问方法
 
 // GetServerName 获取服务器名称
