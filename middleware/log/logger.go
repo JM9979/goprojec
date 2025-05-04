@@ -170,55 +170,95 @@ func getZapLevel(level Level) zapcore.Level {
 }
 
 // 基础日志接口
-func Debug(msg string, fields ...zap.Field) {
+func Debug(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Debug(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Debug(msg)
 	}
 }
 
-func Info(msg string, fields ...zap.Field) {
+func Info(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Info(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Info(msg)
 	}
 }
 
-func Warn(msg string, fields ...zap.Field) {
+func Warn(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Warn(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Warn(msg)
 	}
 }
 
-func Error(msg string, fields ...zap.Field) {
+func Error(args ...interface{}) {
 	if globalLogger != nil {
-		globalLogger.Error(msg, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		globalLogger.Error(msg)
 	}
 }
 
 // WithContext相关的日志方法
-func DebugWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func DebugWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Debug(msg, fields...)
 	}
 }
 
-func InfoWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func InfoWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Info(msg, fields...)
 	}
 }
 
-func WarnWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func WarnWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Warn(msg, fields...)
 	}
 }
 
-func ErrorWithContext(ctx context.Context, msg string, fields ...zap.Field) {
+func ErrorWithContext(ctx context.Context, args ...interface{}) {
 	if globalLogger != nil {
-		fields = appendTraceFields(ctx, fields...)
+		msg := fmt.Sprintln(args...)
+		// 移除末尾的换行符
+		if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+			msg = msg[:len(msg)-1]
+		}
+		fields := appendTraceFields(ctx)
 		globalLogger.Error(msg, fields...)
 	}
 }
@@ -283,16 +323,19 @@ func ErrorWithContextf(ctx context.Context, format string, args ...interface{}) 
 
 // appendTraceFields 添加追踪相关字段
 func appendTraceFields(ctx context.Context, fields ...zap.Field) []zap.Field {
+	result := make([]zap.Field, 0, len(fields)+2) // 预分配容量为当前fields加上最多两个trace字段
+	result = append(result, fields...)            // 添加已有的fields
+
 	if span := trace.SpanFromContext(ctx); span != nil {
 		spanContext := span.SpanContext()
 		if spanContext.HasTraceID() {
-			fields = append(fields, zap.String("trace_id", spanContext.TraceID().String()))
+			result = append(result, zap.String("trace_id", spanContext.TraceID().String()))
 		}
 		if spanContext.HasSpanID() {
-			fields = append(fields, zap.String("span_id", spanContext.SpanID().String()))
+			result = append(result, zap.String("span_id", spanContext.SpanID().String()))
 		}
 	}
-	return fields
+	return result
 }
 
 // Field 创建一个zap.Field，方便使用

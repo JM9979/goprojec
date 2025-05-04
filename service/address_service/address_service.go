@@ -5,7 +5,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 
 	"ginproject/logic/address"
 	"ginproject/middleware/log"
@@ -45,7 +44,7 @@ func (s *AddressService) GetAddressUnspentUtxos(c *gin.Context) {
 	// 调用业务逻辑层
 	utxos, err := s.addressLogic.GetAddressUnspentUtxos(ctx, address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址UTXO失败", zap.Error(err))
+		log.ErrorWithContext(ctx, "获取地址UTXO失败", err)
 		c.JSON(http.StatusOK, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "获取地址UTXO失败: " + err.Error(),
@@ -65,7 +64,7 @@ func (s *AddressService) GetAddressHistory(c *gin.Context) {
 	address := c.Param("address")
 
 	// 记录请求日志
-	log.InfoWithContext(ctx, "收到获取地址历史交易请求", zap.String("address", address))
+	log.InfoWithContext(ctx, "收到获取地址历史交易请求", "address:", address)
 
 	// 参数验证
 	if address == "" {
@@ -107,8 +106,8 @@ func (s *AddressService) GetAddressHistoryPaged(c *gin.Context) {
 
 	// 记录请求日志
 	log.InfoWithContext(ctx, "收到获取地址历史交易分页请求",
-		zap.String("address", address),
-		zap.Int("page", page))
+		"address:", address,
+		"page:", page)
 
 	// 参数验证
 	if address == "" {
@@ -142,7 +141,7 @@ func (s *AddressService) GetAddressBalance(c *gin.Context) {
 	address := c.Param("address")
 
 	// 记录请求日志
-	log.InfoWithContext(ctx, "收到获取地址余额请求", zap.String("address", address))
+	log.InfoWithContext(ctx, "收到获取地址余额请求", "address:", address)
 
 	// 参数验证
 	if address == "" {
@@ -156,7 +155,7 @@ func (s *AddressService) GetAddressBalance(c *gin.Context) {
 	// 调用业务逻辑层
 	balanceData, err := s.addressLogic.GetAddressBalance(ctx, address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址余额失败", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "获取地址余额失败", "address:", address, "错误:", err)
 		c.JSON(http.StatusOK, gin.H{
 			"status":  http.StatusInternalServerError,
 			"message": "获取地址余额失败: " + err.Error(),
@@ -180,7 +179,7 @@ func (s *AddressService) GetAddressFrozenBalance(c *gin.Context) {
 	address := c.Param("address")
 
 	// 记录请求日志
-	log.InfoWithContext(ctx, "收到获取地址冻结余额请求", zap.String("address", address))
+	log.InfoWithContext(ctx, "收到获取地址冻结余额请求", "address:", address)
 
 	// 参数验证
 	if address == "" {
@@ -194,7 +193,7 @@ func (s *AddressService) GetAddressFrozenBalance(c *gin.Context) {
 	// 调用业务逻辑层
 	frozenBalanceData, err := s.addressLogic.GetAddressFrozenBalance(ctx, address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址冻结余额失败", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "获取地址冻结余额失败", "address:", address, "错误:", err)
 		c.JSON(http.StatusOK, gin.H{
 			"status":  http.StatusInternalServerError,
 			"message": "获取地址冻结余额失败: " + err.Error(),

@@ -14,7 +14,6 @@ import (
 	"ginproject/repo/db"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -38,9 +37,9 @@ func CreateServer(r *gin.Engine) *Server {
 func (h *Server) Start() {
 	// 在单独的goroutine中启动服务器
 	go func() {
-		log.Info("服务启动成功", zap.String("地址", h.server.Addr))
+		log.Info("服务启动成功", "地址:", h.server.Addr)
 		if err := h.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("服务启动失败", zap.Error(err))
+			log.Error("服务启动失败", "错误:", err)
 			os.Exit(1)
 		}
 	}()
@@ -57,7 +56,7 @@ func (h *Server) WaitForInterruptAndShutdown() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	// 阻塞，直到接收到信号
 	<-quit
-	log.Info("正在关闭服务，断开连接...", zap.String("地址", h.server.Addr))
+	log.Info("正在关闭服务，断开连接...", "地址:", h.server.Addr)
 
 	// 创建超时上下文，优雅关闭
 	h.GracefulShutdown()
@@ -70,11 +69,11 @@ func (h *Server) GracefulShutdown() {
 	defer cancel()
 
 	if err := h.server.Shutdown(ctx); err != nil {
-		log.Error("服务关闭时发生错误", zap.Error(err), zap.String("地址", h.server.Addr))
+		log.Error("服务关闭时发生错误", "错误:", err, "地址:", h.server.Addr)
 	}
 
 	// 关闭数据库连接
 	db.Close()
 
-	log.Info("服务已安全关闭", zap.String("地址", h.server.Addr))
+	log.Info("服务已安全关闭", "地址:", h.server.Addr)
 }

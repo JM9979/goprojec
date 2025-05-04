@@ -12,7 +12,6 @@ import (
 	tbcapi "ginproject/service/tbc_api"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 var router *gin.Engine
@@ -27,7 +26,7 @@ func init() {
 func main() {
 	// 全局初始化
 	if err := repo.Global_init(); err != nil {
-		log.Error("全局初始化失败", zap.Error(err))
+		log.Error("全局初始化失败", "错误:", err)
 		os.Exit(1)
 	}
 

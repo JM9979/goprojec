@@ -15,8 +15,6 @@ import (
 	"ginproject/middleware/log"
 	rpcbchain "ginproject/repo/rpc/blockchain"
 	rpcex "ginproject/repo/rpc/electrumx"
-
-	"go.uber.org/zap"
 )
 
 // AddressLogic 地址业务逻辑
@@ -30,37 +28,37 @@ func NewAddressLogic() *AddressLogic {
 // GetAddressUnspentUtxos 获取地址的未花费交易输出
 func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address string) (electrumx.UtxoResponse, error) {
 	// 记录开始处理的日志
-	log.InfoWithContext(ctx, "开始获取地址的UTXO", zap.String("address", address))
+	log.InfoWithContext(ctx, "开始获取地址的UTXO", "address:", address)
 
 	// 验证地址合法性
 	valid, addrType, err := utility.ValidateWIFAddress(address)
 	if err != nil || !valid {
-		log.ErrorWithContext(ctx, "地址验证失败", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
 		return nil, fmt.Errorf("无效的地址格式: %w", err)
 	}
 
-	log.InfoWithContext(ctx, "地址验证通过", zap.String("address", address), zap.Int("type", addrType))
+	log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
 
 	// 将地址转换为脚本哈希
 	scriptHash, err := utility.AddressToScriptHash(address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
 		return nil, fmt.Errorf("地址转换失败: %w", err)
 	}
 
-	log.InfoWithContext(ctx, "地址已转换为脚本哈希", zap.String("address", address), zap.String("scriptHash", scriptHash))
+	log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
 
 	// 调用RPC获取UTXO列表
 	utxos, err := rpcex.GetListUnspent(scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取UTXO失败",
-			zap.String("address", address),
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("获取UTXO失败: %w", err)
 	}
 
-	log.InfoWithContext(ctx, "成功获取地址UTXO", zap.String("address", address), zap.Int("count", len(utxos)))
+	log.InfoWithContext(ctx, "成功获取地址UTXO", "address:", address, "count:", len(utxos))
 	return utxos, nil
 }
 
@@ -68,9 +66,9 @@ func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address strin
 func (l *AddressLogic) GetAddressHistoryPage(ctx context.Context, address string, asPage bool, page int) (*electrumx.AddressHistoryResponse, error) {
 	// 记录开始处理的日志
 	log.InfoWithContext(ctx, "开始获取地址的交易历史(分页模式)",
-		zap.String("address", address),
-		zap.Bool("asPage", asPage),
-		zap.Int("page", page))
+		"address:", address,
+		"asPage:", asPage,
+		"page:", page)
 
 	// 验证地址并获取脚本哈希
 	scriptHash, err := l.validateAddressAndGetScriptHash(ctx, address)
@@ -99,11 +97,11 @@ func (l *AddressLogic) GetAddressHistoryPage(ctx context.Context, address string
 	}
 
 	log.InfoWithContext(ctx, "成功获取地址交易历史(分页模式)",
-		zap.String("address", address),
-		zap.Bool("asPage", asPage),
-		zap.Int("page", page),
-		zap.Int("total_count", historyCount),
-		zap.Int("returned_count", len(result)))
+		"address:", address,
+		"asPage:", asPage,
+		"page:", page,
+		"total_count:", historyCount,
+		"returned_count:", len(result))
 
 	return response, nil
 }
@@ -113,20 +111,20 @@ func (l *AddressLogic) validateAddressAndGetScriptHash(ctx context.Context, addr
 	// 验证地址合法性
 	valid, addrType, err := utility.ValidateWIFAddress(address)
 	if err != nil || !valid {
-		log.ErrorWithContext(ctx, "地址验证失败", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
 		return "", fmt.Errorf("无效的地址格式: %w", err)
 	}
 
-	log.InfoWithContext(ctx, "地址验证通过", zap.String("address", address), zap.Int("type", addrType))
+	log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
 
 	// 将地址转换为脚本哈希
 	scriptHash, err := utility.AddressToScriptHash(address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
 		return "", fmt.Errorf("地址转换失败: %w", err)
 	}
 
-	log.InfoWithContext(ctx, "地址已转换为脚本哈希", zap.String("address", address), zap.String("scriptHash", scriptHash))
+	log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
 	return scriptHash, nil
 }
 
@@ -140,17 +138,17 @@ func (l *AddressLogic) getPagedHistory(ctx context.Context, address, scriptHash 
 	historyResponse, err := rpcex.GetScriptHashHistory(scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取交易历史失败",
-			zap.String("address", address),
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return 0, nil, fmt.Errorf("获取交易历史失败: %w", err)
 	}
 
 	// 交易数量
 	historyCount = len(historyResponse)
 	log.InfoWithContext(ctx, "获取到交易历史记录数",
-		zap.String("address", address),
-		zap.Int("count", historyCount))
+		"address:", address,
+		"count:", historyCount)
 
 	// 反转历史记录顺序（从新到旧）
 	for i, j := 0, len(historyResponse)-1; i < j; i, j = i+1, j-1 {
@@ -170,9 +168,9 @@ func (l *AddressLogic) getPagedHistory(ctx context.Context, address, scriptHash 
 		} else {
 			// 超出范围，返回空列表
 			log.InfoWithContext(ctx, "请求的页码超出历史记录范围",
-				zap.String("address", address),
-				zap.Int("page", page),
-				zap.Int("total_records", len(historyResponse)))
+				"address:", address,
+				"page:", page,
+				"total_records:", len(historyResponse))
 			neededItems = make(electrumx.ElectrumXHistoryResponse, 0)
 		}
 	} else {
@@ -211,12 +209,12 @@ func (l *AddressLogic) processTransactionItem(ctx context.Context, address strin
 	txid := item.TxHash
 
 	// 获取交易详情
-	log.InfoWithContext(ctx, "开始获取交易详情", zap.String("txid", txid))
+	log.InfoWithContext(ctx, "开始获取交易详情", "txid:", txid)
 	decodedInfo, err := rpcbchain.DecodeTx(ctx, txid)
 	if err != nil {
 		log.WarnWithContext(ctx, "获取交易详情失败，跳过此记录",
-			zap.String("txid", txid),
-			zap.Error(err))
+			"txid:", txid,
+			"错误:", err)
 		return electrumx.HistoryItem{}, false
 	}
 
@@ -268,6 +266,7 @@ func (l *AddressLogic) processTransactionOutputs(
 	ifTypeDetected *bool,
 	txType *string,
 ) {
+	log.InfoWithContext(ctx, "开始处理交易输出", "address:", address)
 	for _, output := range decodedInfo.Vout {
 		// 将BTC转换为聪（1 BTC = 1,000,000 聪）
 		valueGet := int64(math.Round(output.Value * 1000000))
@@ -331,16 +330,16 @@ func (l *AddressLogic) processTransactionInputs(
 			vinDecoded, err := rpcbchain.DecodeTx(ctx, vinTxid)
 			if err != nil {
 				log.WarnWithContext(ctx, "获取输入交易详情失败",
-					zap.String("vin_txid", vinTxid),
-					zap.Error(err))
+					"vin_txid:", vinTxid,
+					"错误:", err)
 				continue
 			}
 
 			if vinVout >= len(vinDecoded.Vout) {
 				log.WarnWithContext(ctx, "输入索引超出范围",
-					zap.String("vin_txid", vinTxid),
-					zap.Int("vin_vout", vinVout),
-					zap.Int("vout_length", len(vinDecoded.Vout)))
+					"vin_txid:", vinTxid,
+					"vin_vout:", vinVout,
+					"vout_length:", len(vinDecoded.Vout))
 				continue
 			}
 
@@ -430,8 +429,8 @@ func (l *AddressLogic) getTransactionTimestamp(ctx context.Context, item electru
 		blockInfo, err := rpcbchain.GetBlockByHeight(ctx, item.Height)
 		if err != nil {
 			log.WarnWithContext(ctx, "获取区块信息失败",
-				zap.Int("height", item.Height),
-				zap.Error(err))
+				"height:", item.Height,
+				"错误:", err)
 		} else {
 			timeStamp = blockInfo.Time
 			utcTime = time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
@@ -488,12 +487,12 @@ func (l *AddressLogic) sortHistoryByTimestamp(result []electrumx.HistoryItem) {
 // GetAddressBalance 获取地址余额
 func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressBalanceResponse, error) {
 	// 记录开始处理的日志
-	log.InfoWithContext(ctx, "开始获取地址余额", zap.String("address", address))
+	log.InfoWithContext(ctx, "开始获取地址余额", "address:", address)
 
 	// 验证地址并获取脚本哈希
 	scriptHash, err := l.validateAddressAndGetScriptHash(ctx, address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址余额失败：地址验证错误", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "获取地址余额失败：地址验证错误", "address:", address, "错误:", err)
 		return nil, err
 	}
 
@@ -501,9 +500,9 @@ func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*
 	balanceResponse, err := rpcex.GetBalance(scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址余额失败：RPC调用错误",
-			zap.String("address", address),
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("获取地址余额失败: %w", err)
 	}
 
@@ -518,10 +517,10 @@ func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*
 	}
 
 	log.InfoWithContext(ctx, "成功获取地址余额",
-		zap.String("address", address),
-		zap.Int64("confirmed", balanceResponse.Confirmed),
-		zap.Int64("unconfirmed", balanceResponse.Unconfirmed),
-		zap.Int64("total", totalBalance))
+		"address:", address,
+		"confirmed:", balanceResponse.Confirmed,
+		"unconfirmed:", balanceResponse.Unconfirmed,
+		"total:", totalBalance)
 
 	return response, nil
 }
@@ -529,12 +528,12 @@ func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*
 // GetAddressFrozenBalance 获取地址冻结余额
 func (l *AddressLogic) GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.FrozenBalanceResponse, error) {
 	// 记录开始处理的日志
-	log.InfoWithContext(ctx, "开始获取地址冻结余额", zap.String("address", address))
+	log.InfoWithContext(ctx, "开始获取地址冻结余额", "address:", address)
 
 	// 验证地址并获取脚本哈希
 	scriptHash, err := l.validateAddressAndGetScriptHash(ctx, address)
 	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址冻结余额失败：地址验证错误", zap.String("address", address), zap.Error(err))
+		log.ErrorWithContext(ctx, "获取地址冻结余额失败：地址验证错误", "address:", address, "错误:", err)
 		return nil, err
 	}
 
@@ -542,16 +541,15 @@ func (l *AddressLogic) GetAddressFrozenBalance(ctx context.Context, address stri
 	frozenBalanceResponse, err := rpcex.GetAddressFrozenBalance(ctx, address)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址冻结余额失败：RPC调用错误",
-			zap.String("address", address),
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("获取地址冻结余额失败: %w", err)
 	}
 
 	log.InfoWithContext(ctx, "成功获取地址冻结余额",
-		zap.String("address", address),
-		zap.Int64("frozen", frozenBalanceResponse.Frozen))
-		// zap.Int64("lockTime", frozenBalanceResponse.LockTime))
+		"address:", address,
+		"frozen:", frozenBalanceResponse.Frozen)
 
 	return frozenBalanceResponse, nil
 }

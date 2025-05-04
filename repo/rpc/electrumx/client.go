@@ -78,8 +78,8 @@ func (c *ElectrumXClient) Connect() error {
 	}
 
 	// 构建地址
-	address := fmt.Sprintf("%s:%d", c.config.Host, c.config.Port)
-	log.Infof("正在连接ElectrumX服务器: %s", address)
+	address := net.JoinHostPort(c.config.Host, fmt.Sprintf("%d", c.config.Port))
+	log.Info("正在连接ElectrumX服务器:", address)
 
 	// 设置连接超时
 	dialer := &net.Dialer{
@@ -100,7 +100,7 @@ func (c *ElectrumXClient) Connect() error {
 	}
 
 	if err != nil {
-		log.Errorf("连接ElectrumX服务器失败: %v", err)
+		log.Error("连接ElectrumX服务器失败:", err)
 		return fmt.Errorf("连接失败: %w", err)
 	}
 
@@ -121,7 +121,7 @@ func (c *ElectrumXClient) Disconnect() error {
 		c.conn = nil
 		c.connected = false
 		if err != nil {
-			log.Errorf("关闭ElectrumX连接时出错: %v", err)
+			log.Error("关闭ElectrumX连接时出错:", err)
 			return fmt.Errorf("关闭连接失败: %w", err)
 		}
 		log.Info("已断开与ElectrumX服务器的连接")
@@ -159,18 +159,18 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 	reqBytes = append(reqBytes, '\n') // ElectrumX要求每个请求以换行符结束
 
 	// 记录日志
-	log.Debugf("发送ElectrumX RPC请求: method=%s, params=%v", method, params)
+	log.Debug("发送ElectrumX RPC请求:", "method:", method, "params:", params)
 
 	// 设置读写超时
 	deadline := time.Now().Add(c.config.Timeout)
 	if err := c.conn.SetDeadline(deadline); err != nil {
-		log.Warnf("设置连接超时失败: %v", err)
+		log.Warn("设置连接超时失败:", err)
 	}
 
 	// 发送请求
 	_, err = c.conn.Write(reqBytes)
 	if err != nil {
-		log.Errorf("发送RPC请求失败: %v", err)
+		log.Error("发送RPC请求失败:", err)
 		// 尝试重新连接
 		c.Disconnect()
 		return nil, fmt.Errorf("发送RPC请求失败: %w", err)
@@ -190,14 +190,14 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 		// 检查是否超出大小限制
 		if responseBuffer.Len() > maxResponseSize {
 			c.Disconnect()
-			log.Errorf("RPC响应超过大小限制(%dMB)", maxResponseSize/1024/1024)
+			log.Error("RPC响应超过大小限制(", maxResponseSize/1024/1024, "MB)")
 			return nil, fmt.Errorf("RPC响应数据过大，超过%dMB限制", maxResponseSize/1024/1024)
 		}
 
 		// 读取一行数据(ElectrumX响应通常以换行符结束)
 		line, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
-			log.Errorf("读取RPC响应失败: %v", err)
+			log.Error("读取RPC响应失败:", err)
 			c.Disconnect()
 			return nil, fmt.Errorf("读取RPC响应失败: %w", err)
 		}
@@ -216,11 +216,11 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 			if resp.ID == id {
 				// 检查错误
 				if resp.Error != nil {
-					log.Warnf("RPC调用错误: %s (代码: %d)", resp.Error.Message, resp.Error.Code)
+					log.Warn("RPC调用错误:", resp.Error.Message, "(代码:", resp.Error.Code, ")")
 					return nil, fmt.Errorf("RPC调用错误: %s (代码: %d)", resp.Error.Message, resp.Error.Code)
 				}
 
-				log.Debugf("成功接收ElectrumX RPC响应: method=%s, 大小=%d字节", method, responseBuffer.Len())
+				log.Debug("成功接收ElectrumX RPC响应:", "method:", method, "大小:", responseBuffer.Len(), "字节")
 				return resp.Result, nil
 			}
 		}
@@ -233,7 +233,7 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 				respData = respData[:500] + "... [截断]"
 			}
 
-			log.Errorf("连接关闭但未收到完整响应: %s", respData)
+			log.Error("连接关闭但未收到完整响应:", respData)
 			c.Disconnect()
 			return nil, fmt.Errorf("连接关闭但未收到完整响应")
 		}
@@ -290,6 +290,6 @@ func Init() error {
 		return fmt.Errorf("ElectrumX RPC Port无效")
 	}
 
-	log.Infof("ElectrumX RPC客户端初始化完成，服务器: %s:%d", config.Host, config.Port)
+	log.Info("ElectrumX RPC客户端初始化完成，服务器:", net.JoinHostPort(config.Host, fmt.Sprintf("%d", config.Port)))
 	return nil
 }

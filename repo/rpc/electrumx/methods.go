@@ -8,8 +8,6 @@ import (
 	"ginproject/entity/electrumx"
 	utility "ginproject/entity/utility"
 	"ginproject/middleware/log"
-
-	"go.uber.org/zap"
 )
 
 // Global client instance
@@ -44,11 +42,11 @@ func CallMethod(method string, params []interface{}) (json.RawMessage, error) {
 	}
 
 	// 记录开始调用日志
-	log.Infof("开始调用ElectrumX方法: %s", method)
+	log.Info("开始调用ElectrumX方法:", method)
 
 	result, err := client.CallRPC(method, params)
 	if err != nil {
-		log.Errorf("调用ElectrumX方法失败: %s, 错误: %v", method, err)
+		log.Error("调用ElectrumX方法失败:", method, "错误:", err)
 		return nil, err
 	}
 
@@ -106,28 +104,28 @@ func GetBlockHeader(height int) (map[string]interface{}, error) {
 func GetBalance(scriptHash string) (*electrumx.BalanceResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Errorf("调用GetBalance失败: scriptHash不能为空")
+		log.Error("调用GetBalance失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Infof("开始获取脚本哈希余额: %s", scriptHash)
+	log.Info("开始获取脚本哈希余额:", scriptHash)
 
 	// 调用RPC方法
 	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{scriptHash})
 	if err != nil {
-		log.Errorf("获取脚本哈希余额失败: %v", err)
+		log.Error("获取脚本哈希余额失败:", err)
 		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", err)
 	}
 
 	// 解析响应
 	var balance electrumx.BalanceResponse
 	if err := json.Unmarshal(result, &balance); err != nil {
-		log.Errorf("解析脚本哈希余额失败: %v", err)
+		log.Error("解析脚本哈希余额失败:", err, "原始数据:", string(result))
 		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
 	}
 
-	log.Infof("成功获取脚本哈希余额: 已确认=%d, 未确认=%d", balance.Confirmed, balance.Unconfirmed)
+	log.Info("成功获取脚本哈希余额: 已确认=", balance.Confirmed, "未确认=", balance.Unconfirmed)
 	return &balance, nil
 }
 
@@ -247,28 +245,28 @@ func ServerFeatures() (map[string]interface{}, error) {
 func GetScriptHashHistory(scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Errorf("调用GetScriptHashHistory失败: scriptHash不能为空")
+		log.Error("调用GetScriptHashHistory失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Infof("开始获取脚本哈希历史: %s", scriptHash)
+	log.Info("开始获取脚本哈希历史:", scriptHash)
 
 	// 调用RPC方法
 	result, err := CallMethod("blockchain.scripthash.get_history", []interface{}{scriptHash})
 	if err != nil {
-		log.Errorf("获取脚本哈希历史失败: %v", err)
+		log.Error("获取脚本哈希历史失败:", err)
 		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
 	}
 
 	// 解析响应
 	var history electrumx.ElectrumXHistoryResponse
 	if err := json.Unmarshal(result, &history); err != nil {
-		log.Errorf("解析脚本哈希历史失败: %v, 原始数据: %s", err, string(result))
+		log.Error("解析脚本哈希历史失败:", err, "原始数据:", string(result))
 		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
 	}
 
-	log.Infof("成功获取脚本哈希历史, 共 %d 条记录", len(history))
+	log.Info("成功获取脚本哈希历史, 共", len(history), "条记录")
 	return history, nil
 }
 
@@ -311,28 +309,28 @@ type AsyncHistoryResult struct {
 func GetListUnspent(scriptHash string) (electrumx.UtxoResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Errorf("调用GetListUnspent失败: scriptHash不能为空")
+		log.Error("调用GetListUnspent失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Infof("开始获取脚本哈希的UTXO: %s", scriptHash)
+	log.Info("开始获取脚本哈希的UTXO:", scriptHash)
 
 	// 调用RPC方法
 	result, err := CallMethod("blockchain.scripthash.listunspent", []interface{}{scriptHash})
 	if err != nil {
-		log.Errorf("获取UTXO失败: %v", err)
+		log.Error("获取UTXO失败:", err)
 		return nil, fmt.Errorf("获取UTXO失败: %w", err)
 	}
 
 	// 解析响应
 	var utxos electrumx.UtxoResponse
 	if err := json.Unmarshal(result, &utxos); err != nil {
-		log.Errorf("解析UTXO响应失败: %v", err)
+		log.Error("解析UTXO响应失败:", err)
 		return nil, fmt.Errorf("解析UTXO响应失败: %w", err)
 	}
 
-	log.Infof("成功获取UTXO, 数量: %d", len(utxos))
+	log.Info("成功获取UTXO, 数量:", len(utxos))
 	return utxos, nil
 }
 
@@ -376,7 +374,7 @@ func AddressToScriptHash(address string) (string, error) {
 	// 调用工具函数进行转换
 	scriptHash, err := utility.AddressToScriptHash(address)
 	if err != nil {
-		log.Errorf("地址转换为脚本哈希失败: %v", err)
+		log.Error("地址转换为脚本哈希失败:", err)
 		return "", fmt.Errorf("地址转换为脚本哈希失败: %w", err)
 	}
 
@@ -390,7 +388,7 @@ var (
 
 // GetUnspent 获取指定脚本哈希的未花费交易输出
 func GetUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse, error) {
-	log.InfoWithContext(ctx, "开始获取脚本哈希的UTXO", zap.String("scriptHash", scriptHash))
+	log.InfoWithContext(ctx, "开始获取脚本哈希的UTXO", "scriptHash:", scriptHash)
 
 	// 参数校验
 	if scriptHash == "" {
@@ -402,14 +400,14 @@ func GetUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse,
 	utxos, err := GetListUnspent(scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取UTXO失败",
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, err
 	}
 
 	log.InfoWithContext(ctx, "成功获取UTXO",
-		zap.String("scriptHash", scriptHash),
-		zap.Int("count", len(utxos)))
+		"scriptHash:", scriptHash,
+		"count:", len(utxos))
 	return utxos, nil
 }
 
@@ -418,7 +416,7 @@ func ConvertAddressToScript(address string) (string, error) {
 	// 调用AddressToScriptHash函数进行转换
 	scriptHash, err := AddressToScriptHash(address)
 	if err != nil {
-		log.Errorf("地址转换为脚本哈希失败: %v", err)
+		log.Error("地址转换为脚本哈希失败:", err)
 		return "", err
 	}
 
@@ -437,15 +435,15 @@ func CallElectrumXRPC(ctx context.Context, method string, params []interface{}) 
 	go func() {
 		// 记录开始调用日志
 		log.InfoWithContext(ctx, "开始调用ElectrumX RPC",
-			zap.String("method", method),
-			zap.Any("params", params))
+			"method:", method,
+			"params:", params)
 
 		// 获取客户端
 		client, err := GetDefaultClient()
 		if err != nil {
 			log.ErrorWithContext(ctx, "获取ElectrumX客户端失败",
-				zap.String("method", method),
-				zap.Error(err))
+				"method:", method,
+				"错误:", err)
 			resultChan <- struct {
 				result json.RawMessage
 				err    error
@@ -468,22 +466,22 @@ func CallElectrumXRPC(ctx context.Context, method string, params []interface{}) 
 	case <-ctx.Done():
 		// 上下文已取消（超时或其他原因）
 		log.WarnWithContext(ctx, "ElectrumX RPC调用已取消",
-			zap.String("method", method),
-			zap.Error(ctx.Err()))
+			"method:", method,
+			"错误:", ctx.Err())
 		return nil, ctx.Err()
 	case result := <-resultChan:
 		// 收到结果
 		if result.err != nil {
 			log.ErrorWithContext(ctx, "ElectrumX RPC调用失败",
-				zap.String("method", method),
-				zap.Error(result.err))
+				"method:", method,
+				"错误:", result.err)
 			return nil, result.err
 		}
 
 		// 记录成功调用
 		log.InfoWithContext(ctx, "ElectrumX RPC调用成功",
-			zap.String("method", method),
-			zap.Int("responseSize", len(result.result)))
+			"method:", method,
+			"responseSize:", len(result.result))
 		return result.result, nil
 	}
 }
@@ -498,14 +496,14 @@ func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electru
 
 	// 记录调用开始
 	log.InfoWithContext(ctx, "开始获取脚本哈希历史",
-		zap.String("scriptHash", scriptHash))
+		"scriptHash:", scriptHash)
 
 	// 通过新的通用调用函数执行RPC请求
 	result, err := CallElectrumXRPC(ctx, "blockchain.scripthash.get_history", []interface{}{scriptHash})
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取脚本哈希历史失败",
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
 	}
 
@@ -513,15 +511,15 @@ func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electru
 	var history electrumx.ElectrumXHistoryResponse
 	if err := json.Unmarshal(result, &history); err != nil {
 		log.ErrorWithContext(ctx, "解析脚本哈希历史失败",
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
 	}
 
 	// 记录成功获取
 	log.InfoWithContext(ctx, "成功获取脚本哈希历史",
-		zap.String("scriptHash", scriptHash),
-		zap.Int("recordCount", len(history)))
+		"scriptHash:", scriptHash,
+		"recordCount:", len(history))
 
 	return history, nil
 }
@@ -530,28 +528,28 @@ func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electru
 func GetScriptHashBalance(scriptHash string) (*electrumx.BalanceResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Errorf("调用GetScriptHashBalance失败: scriptHash不能为空")
+		log.Error("调用GetScriptHashBalance失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Infof("开始获取脚本哈希余额: %s", scriptHash)
+	log.Info("开始获取脚本哈希余额:", scriptHash)
 
 	// 调用RPC方法
 	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{scriptHash})
 	if err != nil {
-		log.Errorf("获取脚本哈希余额失败: %v", err)
+		log.Error("获取脚本哈希余额失败:", err)
 		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", err)
 	}
 
 	// 解析响应
 	var balance electrumx.BalanceResponse
 	if err := json.Unmarshal(result, &balance); err != nil {
-		log.Errorf("解析脚本哈希余额失败: %v, 原始数据: %s", err, string(result))
+		log.Error("解析脚本哈希余额失败:", err, "原始数据:", string(result))
 		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
 	}
 
-	log.Infof("成功获取脚本哈希余额: 已确认=%d, 未确认=%d", balance.Confirmed, balance.Unconfirmed)
+	log.Info("成功获取脚本哈希余额: 已确认=", balance.Confirmed, "未确认=", balance.Unconfirmed)
 	return &balance, nil
 }
 
@@ -600,14 +598,14 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 
 	// 记录调用开始
 	log.InfoWithContext(ctx, "开始获取地址余额",
-		zap.String("address", address))
+		"address:", address)
 
 	// 将地址转换为脚本哈希
 	scriptHash, err := AddressToScriptHash(address)
 	if err != nil {
 		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败",
-			zap.String("address", address),
-			zap.Error(err))
+			"address:", address,
+			"错误:", err)
 		return nil, fmt.Errorf("地址转换为脚本哈希失败: %w", err)
 	}
 
@@ -615,9 +613,9 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 	balance, err := GetScriptHashBalance(scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址余额失败",
-			zap.String("address", address),
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("获取地址余额失败: %w", err)
 	}
 
@@ -632,10 +630,10 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 	}
 
 	log.InfoWithContext(ctx, "成功获取地址余额",
-		zap.String("address", address),
-		zap.Int64("balance", totalBalance),
-		zap.Int64("confirmed", balance.Confirmed),
-		zap.Int64("unconfirmed", balance.Unconfirmed))
+		"address:", address,
+		"balance:", totalBalance,
+		"confirmed:", balance.Confirmed,
+		"unconfirmed:", balance.Unconfirmed)
 
 	return response, nil
 }
@@ -644,28 +642,28 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 func GetScriptHashFrozenBalance(scriptHash string) (*electrumx.FrozenBalanceResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Errorf("调用GetScriptHashFrozenBalance失败: scriptHash不能为空")
+		log.Error("调用GetScriptHashFrozenBalance失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Infof("开始获取脚本哈希冻结余额: %s", scriptHash)
+	log.Info("开始获取脚本哈希冻结余额:", scriptHash)
 
 	// 调用RPC方法
 	result, err := CallMethod("blockchain.scripthash.get_frozen_balance", []interface{}{scriptHash})
 	if err != nil {
-		log.Errorf("获取脚本哈希冻结余额失败: %v", err)
+		log.Error("获取脚本哈希冻结余额失败:", err)
 		return nil, fmt.Errorf("获取脚本哈希冻结余额失败: %w", err)
 	}
 
 	// 解析响应
 	var frozenBalance electrumx.FrozenBalanceResponse
 	if err := json.Unmarshal(result, &frozenBalance); err != nil {
-		log.Errorf("解析脚本哈希冻结余额失败: %v, 原始数据: %s", err, string(result))
+		log.Error("解析脚本哈希冻结余额失败:", err, "原始数据:", string(result))
 		return nil, fmt.Errorf("解析脚本哈希冻结余额失败: %w", err)
 	}
 
-	log.Infof("成功获取脚本哈希冻结余额: 冻结=%d", frozenBalance.Frozen)
+	log.Info("成功获取脚本哈希冻结余额: 冻结=", frozenBalance.Frozen)
 	return &frozenBalance, nil
 }
 
@@ -679,14 +677,14 @@ func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.Fr
 
 	// 记录调用开始
 	log.InfoWithContext(ctx, "开始获取地址冻结余额",
-		zap.String("address", address))
+		"address:", address)
 
 	// 将地址转换为脚本哈希
 	scriptHash, err := AddressToScriptHash(address)
 	if err != nil {
 		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败",
-			zap.String("address", address),
-			zap.Error(err))
+			"address:", address,
+			"错误:", err)
 		return nil, fmt.Errorf("地址转换为脚本哈希失败: %w", err)
 	}
 
@@ -694,15 +692,15 @@ func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.Fr
 	frozenBalance, err := GetScriptHashFrozenBalance(scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址冻结余额失败",
-			zap.String("address", address),
-			zap.String("scriptHash", scriptHash),
-			zap.Error(err))
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
 		return nil, fmt.Errorf("获取地址冻结余额失败: %w", err)
 	}
 
 	log.InfoWithContext(ctx, "成功获取地址冻结余额",
-		zap.String("address", address),
-		zap.Int64("frozen", frozenBalance.Frozen))
+		"address:", address,
+		"frozen:", frozenBalance.Frozen)
 
 	return frozenBalance, nil
 }
