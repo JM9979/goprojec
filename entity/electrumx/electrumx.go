@@ -2,8 +2,8 @@ package electrumx
 
 // ElectrumXHistoryItem 表示单个交易历史记录项
 type ElectrumXHistoryItem struct {
-    TxHash string `json:"tx_hash"`
-    Height int    `json:"height"`
+	TxHash string `json:"tx_hash"`
+	Height int    `json:"height"`
 }
 
 // ElectrumXHistoryResponse 表示从ElectrumX获取的历史记录响应
@@ -39,4 +39,23 @@ type HistoryItem struct {
 	TimeStamp          int64    `json:"time_stamp,omitempty"` // 交易时间戳（可选）
 	UtcTime            string   `json:"utc_time"`             // UTC时间格式
 	TxType             string   `json:"tx_type,omitempty"`    // 交易类型（可选）
+}
+
+// BalanceResponse 表示从ElectrumX获取的余额响应
+type BalanceResponse struct {
+	Confirmed   int64 `json:"confirmed"`   // 已确认的余额（以聪为单位）
+	Unconfirmed int64 `json:"unconfirmed"` // 未确认的余额（以聪为单位）
+}
+
+// AddressBalanceResponse 表示格式化后的地址余额响应
+type AddressBalanceResponse struct {
+	Balance     int64 `json:"balance"`     // 总余额（已确认+未确认）
+	Confirmed   int64 `json:"confirmed"`   // 已确认的余额
+	Unconfirmed int64 `json:"unconfirmed"` // 未确认的余额
+}
+
+// FrozenBalanceResponse 表示冻结余额响应
+type FrozenBalanceResponse struct {
+	Frozen   int64 `json:"frozen_balance"`   // 冻结的余额（以聪为单位）
+	// LockTime int64 `json:"locktime"` // 锁定时间戳
 }

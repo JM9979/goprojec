@@ -103,19 +103,32 @@ func GetBlockHeader(height int) (map[string]interface{}, error) {
 }
 
 // GetBalance 获取地址余额
-func GetBalance(address string) (map[string]interface{}, error) {
-	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{address})
+func GetBalance(scriptHash string) (*electrumx.BalanceResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.Errorf("调用GetBalance失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.Infof("开始获取脚本哈希余额: %s", scriptHash)
+
+	// 调用RPC方法
+	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{scriptHash})
 	if err != nil {
-		return nil, err
+		log.Errorf("获取脚本哈希余额失败: %v", err)
+		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", err)
 	}
 
-	var balance map[string]interface{}
+	// 解析响应
+	var balance electrumx.BalanceResponse
 	if err := json.Unmarshal(result, &balance); err != nil {
-		log.Errorf("解析余额失败: %v", err)
-		return nil, fmt.Errorf("解析余额失败: %w", err)
+		log.Errorf("解析脚本哈希余额失败: %v", err)
+		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
 	}
 
-	return balance, nil
+	log.Infof("成功获取脚本哈希余额: 已确认=%d, 未确认=%d", balance.Confirmed, balance.Unconfirmed)
+	return &balance, nil
 }
 
 // GetTransactionHistory 获取地址交易历史
@@ -511,4 +524,185 @@ func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electru
 		zap.Int("recordCount", len(history)))
 
 	return history, nil
+}
+
+// GetScriptHashBalance 获取指定脚本哈希的余额
+func GetScriptHashBalance(scriptHash string) (*electrumx.BalanceResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.Errorf("调用GetScriptHashBalance失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.Infof("开始获取脚本哈希余额: %s", scriptHash)
+
+	// 调用RPC方法
+	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{scriptHash})
+	if err != nil {
+		log.Errorf("获取脚本哈希余额失败: %v", err)
+		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", err)
+	}
+
+	// 解析响应
+	var balance electrumx.BalanceResponse
+	if err := json.Unmarshal(result, &balance); err != nil {
+		log.Errorf("解析脚本哈希余额失败: %v, 原始数据: %s", err, string(result))
+		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
+	}
+
+	log.Infof("成功获取脚本哈希余额: 已确认=%d, 未确认=%d", balance.Confirmed, balance.Unconfirmed)
+	return &balance, nil
+}
+
+// GetScriptHashBalanceAsync 异步获取指定脚本哈希的余额
+func GetScriptHashBalanceAsync(ctx context.Context, scriptHash string) <-chan AsyncBalanceResult {
+	resultChan := make(chan AsyncBalanceResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			resultChan <- AsyncBalanceResult{
+				Result: nil,
+				Error:  ctx.Err(),
+			}
+			return
+		default:
+			// 继续执行
+		}
+
+		balance, err := GetScriptHashBalance(scriptHash)
+		resultChan <- AsyncBalanceResult{
+			Result: balance,
+			Error:  err,
+		}
+	}()
+
+	return resultChan
+}
+
+// AsyncBalanceResult 表示异步获取余额的结果
+type AsyncBalanceResult struct {
+	Result *electrumx.BalanceResponse
+	Error  error
+}
+
+// GetAddressBalance 获取比特币地址的余额
+func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressBalanceResponse, error) {
+	// 参数校验
+	if address == "" {
+		log.ErrorWithContext(ctx, "地址不能为空")
+		return nil, fmt.Errorf("地址不能为空")
+	}
+
+	// 记录调用开始
+	log.InfoWithContext(ctx, "开始获取地址余额",
+		zap.String("address", address))
+
+	// 将地址转换为脚本哈希
+	scriptHash, err := AddressToScriptHash(address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败",
+			zap.String("address", address),
+			zap.Error(err))
+		return nil, fmt.Errorf("地址转换为脚本哈希失败: %w", err)
+	}
+
+	// 获取脚本哈希余额
+	balance, err := GetScriptHashBalance(scriptHash)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址余额失败",
+			zap.String("address", address),
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, fmt.Errorf("获取地址余额失败: %w", err)
+	}
+
+	// 计算总余额
+	totalBalance := balance.Confirmed + balance.Unconfirmed
+
+	// 构造响应
+	response := &electrumx.AddressBalanceResponse{
+		Balance:     totalBalance,
+		Confirmed:   balance.Confirmed,
+		Unconfirmed: balance.Unconfirmed,
+	}
+
+	log.InfoWithContext(ctx, "成功获取地址余额",
+		zap.String("address", address),
+		zap.Int64("balance", totalBalance),
+		zap.Int64("confirmed", balance.Confirmed),
+		zap.Int64("unconfirmed", balance.Unconfirmed))
+
+	return response, nil
+}
+
+// GetScriptHashFrozenBalance 获取指定脚本哈希的冻结余额
+func GetScriptHashFrozenBalance(scriptHash string) (*electrumx.FrozenBalanceResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.Errorf("调用GetScriptHashFrozenBalance失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.Infof("开始获取脚本哈希冻结余额: %s", scriptHash)
+
+	// 调用RPC方法
+	result, err := CallMethod("blockchain.scripthash.get_frozen_balance", []interface{}{scriptHash})
+	if err != nil {
+		log.Errorf("获取脚本哈希冻结余额失败: %v", err)
+		return nil, fmt.Errorf("获取脚本哈希冻结余额失败: %w", err)
+	}
+
+	// 解析响应
+	var frozenBalance electrumx.FrozenBalanceResponse
+	if err := json.Unmarshal(result, &frozenBalance); err != nil {
+		log.Errorf("解析脚本哈希冻结余额失败: %v, 原始数据: %s", err, string(result))
+		return nil, fmt.Errorf("解析脚本哈希冻结余额失败: %w", err)
+	}
+
+	log.Infof("成功获取脚本哈希冻结余额: 冻结=%d", frozenBalance.Frozen)
+	return &frozenBalance, nil
+}
+
+// GetAddressFrozenBalance 获取比特币地址的冻结余额
+func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.FrozenBalanceResponse, error) {
+	// 参数校验
+	if address == "" {
+		log.ErrorWithContext(ctx, "地址不能为空")
+		return nil, fmt.Errorf("地址不能为空")
+	}
+
+	// 记录调用开始
+	log.InfoWithContext(ctx, "开始获取地址冻结余额",
+		zap.String("address", address))
+
+	// 将地址转换为脚本哈希
+	scriptHash, err := AddressToScriptHash(address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败",
+			zap.String("address", address),
+			zap.Error(err))
+		return nil, fmt.Errorf("地址转换为脚本哈希失败: %w", err)
+	}
+
+	// 获取脚本哈希冻结余额
+	frozenBalance, err := GetScriptHashFrozenBalance(scriptHash)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址冻结余额失败",
+			zap.String("address", address),
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, fmt.Errorf("获取地址冻结余额失败: %w", err)
+	}
+
+	log.InfoWithContext(ctx, "成功获取地址冻结余额",
+		zap.String("address", address),
+		zap.Int64("frozen", frozenBalance.Frozen))
+
+	return frozenBalance, nil
 }

@@ -78,4 +78,8 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/address/:address/history", addressService.GetAddressHistory)
 	// 添加获取地址历史交易分页的路由
 	apiGroup.GET("/address/:address/history/page/:page", addressService.GetAddressHistoryPaged)
+	// 添加获取地址余额的路由
+	apiGroup.GET("/address/:address/get/balance", addressService.GetAddressBalance)
+	// 添加获取地址冻结余额的路由
+	apiGroup.GET("/address/:address/get/balance/frozen", addressService.GetAddressFrozenBalance)
 }

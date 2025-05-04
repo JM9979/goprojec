@@ -133,3 +133,79 @@ func (s *AddressService) GetAddressHistoryPaged(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, history)
 }
+
+// GetAddressBalance 获取地址余额
+// @Router /v1/tbc/main/address/{address}/get/balance [get]
+func (s *AddressService) GetAddressBalance(c *gin.Context) {
+	// 获取上下文和参数
+	ctx := c.Request.Context()
+	address := c.Param("address")
+
+	// 记录请求日志
+	log.InfoWithContext(ctx, "收到获取地址余额请求", zap.String("address", address))
+
+	// 参数验证
+	if address == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  http.StatusBadRequest,
+			"message": "地址参数不能为空",
+		})
+		return
+	}
+
+	// 调用业务逻辑层
+	balanceData, err := s.addressLogic.GetAddressBalance(ctx, address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址余额失败", zap.String("address", address), zap.Error(err))
+		c.JSON(http.StatusOK, gin.H{
+			"status":  http.StatusInternalServerError,
+			"message": "获取地址余额失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{
+		"status":  0,
+		"address": address,
+		"data":    balanceData,
+	})
+}
+
+// GetAddressFrozenBalance 获取地址冻结余额
+// @Router /v1/tbc/main/address/{address}/get/balance/frozen [get]
+func (s *AddressService) GetAddressFrozenBalance(c *gin.Context) {
+	// 获取上下文和参数
+	ctx := c.Request.Context()
+	address := c.Param("address")
+
+	// 记录请求日志
+	log.InfoWithContext(ctx, "收到获取地址冻结余额请求", zap.String("address", address))
+
+	// 参数验证
+	if address == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  http.StatusBadRequest,
+			"message": "地址参数不能为空",
+		})
+		return
+	}
+
+	// 调用业务逻辑层
+	frozenBalanceData, err := s.addressLogic.GetAddressFrozenBalance(ctx, address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址冻结余额失败", zap.String("address", address), zap.Error(err))
+		c.JSON(http.StatusOK, gin.H{
+			"status":  http.StatusInternalServerError,
+			"message": "获取地址冻结余额失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, gin.H{
+		"status":  0,
+		"address": address,
+		"data":    frozenBalanceData,
+	})
+}

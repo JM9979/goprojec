@@ -484,3 +484,74 @@ func (l *AddressLogic) sortHistoryByTimestamp(result []electrumx.HistoryItem) {
 		}
 	}
 }
+
+// GetAddressBalance 获取地址余额
+func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressBalanceResponse, error) {
+	// 记录开始处理的日志
+	log.InfoWithContext(ctx, "开始获取地址余额", zap.String("address", address))
+
+	// 验证地址并获取脚本哈希
+	scriptHash, err := l.validateAddressAndGetScriptHash(ctx, address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址余额失败：地址验证错误", zap.String("address", address), zap.Error(err))
+		return nil, err
+	}
+
+	// 调用RPC获取余额
+	balanceResponse, err := rpcex.GetBalance(scriptHash)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址余额失败：RPC调用错误",
+			zap.String("address", address),
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, fmt.Errorf("获取地址余额失败: %w", err)
+	}
+
+	// 计算总余额
+	totalBalance := balanceResponse.Confirmed + balanceResponse.Unconfirmed
+
+	// 创建响应
+	response := &electrumx.AddressBalanceResponse{
+		Balance:     totalBalance,
+		Confirmed:   balanceResponse.Confirmed,
+		Unconfirmed: balanceResponse.Unconfirmed,
+	}
+
+	log.InfoWithContext(ctx, "成功获取地址余额",
+		zap.String("address", address),
+		zap.Int64("confirmed", balanceResponse.Confirmed),
+		zap.Int64("unconfirmed", balanceResponse.Unconfirmed),
+		zap.Int64("total", totalBalance))
+
+	return response, nil
+}
+
+// GetAddressFrozenBalance 获取地址冻结余额
+func (l *AddressLogic) GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.FrozenBalanceResponse, error) {
+	// 记录开始处理的日志
+	log.InfoWithContext(ctx, "开始获取地址冻结余额", zap.String("address", address))
+
+	// 验证地址并获取脚本哈希
+	scriptHash, err := l.validateAddressAndGetScriptHash(ctx, address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址冻结余额失败：地址验证错误", zap.String("address", address), zap.Error(err))
+		return nil, err
+	}
+
+	// 调用RPC获取冻结余额
+	frozenBalanceResponse, err := rpcex.GetAddressFrozenBalance(ctx, address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取地址冻结余额失败：RPC调用错误",
+			zap.String("address", address),
+			zap.String("scriptHash", scriptHash),
+			zap.Error(err))
+		return nil, fmt.Errorf("获取地址冻结余额失败: %w", err)
+	}
+
+	log.InfoWithContext(ctx, "成功获取地址冻结余额",
+		zap.String("address", address),
+		zap.Int64("frozen", frozenBalanceResponse.Frozen))
+		// zap.Int64("lockTime", frozenBalanceResponse.LockTime))
+
+	return frozenBalanceResponse, nil
+}
