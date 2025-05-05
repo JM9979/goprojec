@@ -8,6 +8,7 @@ import (
 	"ginproject/repo"
 	"ginproject/service"
 	address_service "ginproject/service/address_service"
+	block_service "ginproject/service/block_service"
 	exchange_service "ginproject/service/exchange_service"
 	ft_service "ginproject/service/ft_service"
 	health_service "ginproject/service/health_service"
@@ -86,4 +87,17 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/address/:address/get/balance", addressService.GetAddressBalance)
 	// 添加获取地址冻结余额的路由
 	apiGroup.GET("/address/:address/get/balance/frozen", addressService.GetAddressFrozenBalance)
+
+	// 注册区块服务API
+	blockService := block_service.NewBlockService()
+	// 添加通过高度获取区块详情的路由
+	apiGroup.GET("/block/height/:height", blockService.GetBlockByHeight)
+	// 添加通过哈希获取区块详情的路由
+	apiGroup.GET("/block/hash/:hash", blockService.GetBlockByHash)
+	// 添加通过高度获取区块头信息的路由
+	apiGroup.GET("/block/height/:height/header", blockService.GetBlockHeaderByHeight)
+	// 添加通过哈希获取区块头信息的路由
+	apiGroup.GET("/block/hash/:hash/header", blockService.GetBlockHeaderByHash)
+	// 添加获取附近10个区块头信息的路由
+	apiGroup.GET("/block/headers", blockService.GetNearby10Headers)
 }

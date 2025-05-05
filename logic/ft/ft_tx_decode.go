@@ -22,7 +22,7 @@ func (l *FtLogic) DecodeFtTransactionHistory(ctx context.Context, req *ft.FtTxDe
 	log.InfoWithContextf(ctx, "开始解析FT交易: 交易ID=%s", req.Txid)
 
 	// 调用RPC解析交易
-	decode_tx, err := rpcblockchain.CallRPC("getrawtransaction", []interface{}{req.Txid, 1}, false)
+	decode_tx, err := rpcblockchain.GetRawTransaction(ctx, req.Txid, true)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "解析交易失败: %v", err)
 		return nil, fmt.Errorf("解析交易失败: %v", err)
