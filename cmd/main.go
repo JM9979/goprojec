@@ -8,8 +8,10 @@ import (
 	"ginproject/repo"
 	"ginproject/service"
 	address_service "ginproject/service/address_service"
+	exchange_service "ginproject/service/exchange_service"
 	ft_service "ginproject/service/ft_service"
 	health_service "ginproject/service/health_service"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -43,6 +45,10 @@ func registerRoutes(r *gin.Engine) {
 
 	// 添加健康检查端点
 	apiGroup.GET("/health", health_service.NewHealthService().HealthCheck)
+
+	// 注册交易所服务API
+	exchangeService := exchange_service.NewExchangeService()
+	apiGroup.GET("/exchangerate", exchangeService.GetExchangeRate)
 
 	// 注册FT服务API
 	ftService := ft_service.NewFtService()
