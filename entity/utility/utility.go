@@ -3,6 +3,7 @@ package utility
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -630,4 +631,121 @@ func ConvertP2msScriptToMsAddress(script string) (string, error) {
 	msAddress := base58.CheckEncode(pubkeysHash, versionByte)
 
 	return msAddress, nil
+}
+
+// ConvertAddressToNftScriptHash 将加密货币地址转换为NFT脚本哈希
+// 输入: 加密货币地址和是否为集合类型的标志
+// 返回: 脚本哈希的十六进制字符串表示
+func ConvertAddressToNftScriptHash(address string, isCollection bool) (string, error) {
+	// 参数校验
+	if address == "" {
+		return "", fmt.Errorf("地址不能为空")
+	}
+
+	// 获取公钥哈希
+	pubKeyHash, err := ConvertAddressToPublicKeyHash(address)
+	if err != nil {
+		return "", fmt.Errorf("转换地址到公钥哈希失败: %w", err)
+	}
+
+	// 公钥哈希转换为字节
+	pubKeyHashBytes, err := hex.DecodeString(pubKeyHash)
+	if err != nil {
+		return "", fmt.Errorf("解码公钥哈希失败: %w", err)
+	}
+
+	// 构建脚本字节
+	// P2PKH脚本部分: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+	script := []byte{0x76, 0xa9, 0x14}
+	script = append(script, pubKeyHashBytes...)
+	script = append(script, 0x88, 0xac)
+
+	// 添加OP_RETURN数据
+	// OP_RETURN (0x6a) 后跟数据长度 (0x0d = 13字节) 和数据
+	script = append(script, 0x6a, 0x0d)
+
+	// 根据isCollection参数添加不同的OP_RETURN数据
+	if isCollection {
+		// V0 Mint NHold
+		script = append(script, []byte{0x56, 0x30, 0x20, 0x4d, 0x69, 0x6e, 0x74, 0x20, 0x4e, 0x48, 0x6f, 0x6c, 0x64}...)
+	} else {
+		// V0 Curr NHold
+		script = append(script, []byte{0x56, 0x30, 0x20, 0x43, 0x75, 0x72, 0x72, 0x20, 0x4e, 0x48, 0x6f, 0x6c, 0x64}...)
+	}
+
+	// 计算SHA256哈希
+	hash := sha256.Sum256(script)
+
+	// 转换为小端序（反转字节顺序）
+	reversed := make([]byte, len(hash))
+	for i := 0; i < len(hash); i++ {
+		reversed[i] = hash[len(hash)-1-i]
+	}
+
+	// 转换为十六进制字符串
+	scriptHash := hex.EncodeToString(reversed)
+
+	return scriptHash, nil
+}
+
+// HexToJson 将十六进制字符串转换为JSON对象
+func HexToJson(hexStr string) (map[string]interface{}, error) {
+	// 十六进制字符串转换为字节
+	bytes, err := hex.DecodeString(hexStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// 字节解析为JSON
+	var result map[string]interface{}
+	err = json.Unmarshal(bytes, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// ConvertCompressedPubkeyToLegacyAddress 将压缩公钥转换为传统地址
+func ConvertCompressedPubkeyToLegacyAddress(pubkeyHex string) (string, error) {
+	if len(pubkeyHex) != 66 {
+		return "", fmt.Errorf("压缩公钥长度必须为66字符")
+	}
+
+	// 将十六进制字符串转换为字节
+	pubkeyBytes, err := hex.DecodeString(pubkeyHex)
+	if err != nil {
+		return "", err
+	}
+
+	// 生成传统地址
+	// 实际上这里需要根据项目的具体加密算法进行实现
+	// 这里提供一个简化的实现
+
+	// 简化实现，假设生成一个固定前缀的地址
+	hash := sha256.Sum256(pubkeyBytes)
+	ripemd160Hash := ripemd160.New()
+	ripemd160Hash.Write(hash[:])
+	pubKeyHash := ripemd160Hash.Sum(nil)
+
+	// 添加版本前缀
+	versionedPayload := append([]byte{0x00}, pubKeyHash...)
+
+	// 计算校验和
+	checksum := doubleSHA256(versionedPayload)[:4]
+
+	// 组合最终结果
+	fullPayload := append(versionedPayload, checksum...)
+
+	// Base58编码
+	address := base58.Encode(fullPayload)
+
+	return address, nil
+}
+
+// doubleSHA256 辅助函数，计算double SHA256哈希
+func doubleSHA256(data []byte) []byte {
+	hash1 := sha256.Sum256(data)
+	hash2 := sha256.Sum256(hash1[:])
+	return hash2[:]
 }

@@ -12,6 +12,8 @@ import (
 	exchange_service "ginproject/service/exchange_service"
 	ft_service "ginproject/service/ft_service"
 	health_service "ginproject/service/health_service"
+	nft_service "ginproject/service/nft_service"
+	script_service "ginproject/service/script_service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -102,4 +104,29 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/block/headers", blockService.GetNearby10Headers)
 	// 添加获取区块链信息的路由
 	apiGroup.GET("/chain/info", blockService.GetChainInfo)
+
+	// 注册脚本服务API
+	scriptService := script_service.NewScriptService()
+	apiGroup.GET("/script/hash/:script_hash/unspent", scriptService.GetScriptUnspent)
+	apiGroup.GET("/script/hash/:script_hash/history", scriptService.GetScriptHistory)
+
+	// 注册NFT服务API
+	nftService := nft_service.NewNftService()
+
+	// 1. 获取地址的NFT集合
+	apiGroup.GET("/nft/collection/address/:address/page/:page/size/:size", nftService.GetCollectionsByAddress)
+	// 2. 获取地址的NFT资产
+	apiGroup.GET("/nft/address/:address/page/:page/size/:size", nftService.GetNftsByAddress)
+	// 3. 获取脚本哈希的NFT资产
+	apiGroup.GET("/nft/script/hash/:script_hash/page/:page/size/:size", nftService.GetNftsByScriptHash)
+	// 4. 获取集合的NFT资产
+	apiGroup.GET("/nft/collection/id/:collection_id/page/:page/size/:size", nftService.GetNftsByCollectionId)
+	// 5. 获取地址的NFT交易历史
+	apiGroup.GET("/nft/history/address/:address/page/:page/size/:size", nftService.GetNftHistory)
+	// 6. 获取所有NFT集合
+	apiGroup.GET("/nft/collections/page/:page/size/:size", nftService.GetAllCollections)
+	// 7. 获取集合详细信息
+	apiGroup.GET("/nft/collection/info/:collection_id", nftService.GetDetailCollectionInfo)
+	// 8. 根据合约ID获取NFT信息
+	apiGroup.POST("/nft/infos/contract_ids", nftService.GetNftsByContractIds)
 }
