@@ -100,4 +100,6 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/block/hash/:hash/header", blockService.GetBlockHeaderByHash)
 	// 添加获取附近10个区块头信息的路由
 	apiGroup.GET("/block/headers", blockService.GetNearby10Headers)
+	// 添加获取区块链信息的路由
+	apiGroup.GET("/chain/info", blockService.GetChainInfo)
 }

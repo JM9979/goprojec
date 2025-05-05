@@ -10,11 +10,12 @@ import (
 
 // 节点RPC方法名常量
 const (
-	RpcMethodGetBlockByHeight = "getblockbyheight"
-	RpcMethodGetBlock         = "getblock"
-	RpcMethodGetBlockHash     = "getblockhash"
-	RpcMethodGetBlockHeader   = "getblockheader"
-	RpcMethodGetInfo          = "getinfo"
+	RpcMethodGetBlockByHeight  = "getblockbyheight"
+	RpcMethodGetBlock          = "getblock"
+	RpcMethodGetBlockHash      = "getblockhash"
+	RpcMethodGetBlockHeader    = "getblockheader"
+	RpcMethodGetInfo           = "getinfo"
+	RpcMethodGetBlockchainInfo = "getblockchaininfo"
 )
 
 // BlockInfo 表示区块信息
@@ -251,4 +252,25 @@ func GetBlockByHeight(ctx context.Context, height int64) (map[string]interface{}
 
 	log.InfoWithContextf(ctx, "成功获取区块信息: height=%d", height)
 	return resultMap, nil
+}
+
+// FetchChainInfo 获取区块链信息
+func FetchChainInfo(ctx context.Context) (map[string]interface{}, error) {
+	traceId := ctx.Value("trace_id")
+	log.Info("[RPC请求] 获取区块链信息", "trace_id", traceId)
+
+	response, err := CallRPC(RpcMethodGetBlockchainInfo, []interface{}{}, false)
+	if err != nil {
+		log.Error("[RPC请求失败] 获取区块链信息", "trace_id", traceId, "error", err)
+		return nil, err
+	}
+
+	responseMap, ok := response.(map[string]interface{})
+	if !ok {
+		log.Error("[RPC响应格式错误] 获取区块链信息", "trace_id", traceId)
+		return nil, fmt.Errorf("响应格式错误")
+	}
+
+	log.Info("[RPC请求成功] 获取区块链信息", "trace_id", traceId)
+	return responseMap, nil
 }
