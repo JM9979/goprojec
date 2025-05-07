@@ -164,3 +164,105 @@ func (dao *NftUtxoSetDAO) GetAllPoolsWithPagination(ctx context.Context, page, s
 
 	return results, totalCount, err
 }
+
+// GetNftsByHolderWithPagination 根据持有者脚本哈希分页获取NFT列表
+func (dao *NftUtxoSetDAO) GetNftsByHolderWithPagination(ctx context.Context, holderScriptHash string, page, size int) ([]*dbtable.NftUtxoSet, int64, error) {
+	var nfts []*dbtable.NftUtxoSet
+	var total int64
+
+	// 计算起始索引
+	offset := page * size
+
+	// 获取总记录数
+	if err := dao.db.WithContext(ctx).
+		Model(&dbtable.NftUtxoSet{}).
+		Where("nft_holder_script_hash = ?", holderScriptHash).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 获取分页数据，按照最后转移时间戳倒序排序
+	if err := dao.db.WithContext(ctx).
+		Where("nft_holder_script_hash = ?", holderScriptHash).
+		Order("nft_last_transfer_timestamp DESC").
+		Limit(size).
+		Offset(offset).
+		Find(&nfts).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return nfts, total, nil
+}
+
+// GetNftsByCollectionIdWithPagination 根据集合ID分页获取NFT列表
+func (dao *NftUtxoSetDAO) GetNftsByCollectionIdWithPagination(ctx context.Context, collectionId string, page, size int) ([]*dbtable.NftUtxoSet, int64, error) {
+	var nfts []*dbtable.NftUtxoSet
+	var total int64
+
+	// 计算起始索引
+	offset := page * size
+
+	// 获取总记录数
+	if err := dao.db.WithContext(ctx).
+		Model(&dbtable.NftUtxoSet{}).
+		Where("collection_id = ?", collectionId).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 获取分页数据，按照集合索引排序
+	if err := dao.db.WithContext(ctx).
+		Where("collection_id = ?", collectionId).
+		Order("collection_index").
+		Limit(size).
+		Offset(offset).
+		Find(&nfts).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return nfts, total, nil
+}
+
+// GetNftsByContractIds 根据合约ID列表获取NFT信息
+func (dao *NftUtxoSetDAO) GetNftsByContractIds(ctx context.Context, contractIds []string) ([]*dbtable.NftUtxoSet, error) {
+	var nfts []*dbtable.NftUtxoSet
+
+	if err := dao.db.WithContext(ctx).
+		Where("nft_contract_id IN ?", contractIds).
+		Find(&nfts).Error; err != nil {
+		return nil, err
+	}
+
+	return nfts, nil
+}
+
+// GetNftByUtxoId 根据UTXO ID获取NFT信息
+func (dao *NftUtxoSetDAO) GetNftByUtxoId(ctx context.Context, utxoId string) (*dbtable.NftUtxoSet, error) {
+	var nft dbtable.NftUtxoSet
+	err := dao.db.WithContext(ctx).
+		Where("nft_utxo_id = ?", utxoId).
+		First(&nft).Error
+	if err != nil {
+		return nil, err
+	}
+	return &nft, nil
+}
+
+// GetNftUtxoByContractIdWithContext 根据合约ID获取NFT UTXO（带上下文）
+func (dao *NftUtxoSetDAO) GetNftUtxoByContractIdWithContext(ctx context.Context, contractId string) (*dbtable.NftUtxoSet, error) {
+	var utxo dbtable.NftUtxoSet
+	err := dao.db.WithContext(ctx).Where("nft_contract_id = ?", contractId).First(&utxo).Error
+	if err != nil {
+		return nil, err
+	}
+	return &utxo, nil
+}
+
+// GetNftsByCollectionAndIndex 根据集合ID和索引获取NFT列表
+func (dao *NftUtxoSetDAO) GetNftsByCollectionAndIndex(ctx context.Context, collectionId string, collectionIndex int) ([]*dbtable.NftUtxoSet, error) {
+	var nfts []*dbtable.NftUtxoSet
+	err := dao.db.WithContext(ctx).
+		Where("collection_id = ? AND collection_index = ?", collectionId, collectionIndex).
+		Find(&nfts).Error
+	return nfts, err
+}

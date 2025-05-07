@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -418,21 +419,30 @@ func (l *AddressLogic) buildAddressesAndFee(
 	return recipientAddresses, senderAddresses, feeStr
 }
 
-// getTransactionTimestamp 获取交易时间戳
+// getTransactionTimestamp 获取交易的时间戳信息
 func (l *AddressLogic) getTransactionTimestamp(ctx context.Context, item electrumx.ElectrumXHistoryItem) (string, int64) {
 	var utcTime string
 	var timeStamp int64
 
 	if item.Height < 1 {
 		utcTime = "unconfirmed"
+		timeStamp = 0
 	} else {
-		blockInfo, err := rpcbchain.GetBlockByHeight(ctx, item.Height)
+		// 使用getblockbyheight获取区块信息，与Python版本保持一致
+		blockInfo, err := rpcbchain.GetBlockByHeight(ctx, int64(item.Height))
 		if err != nil {
-			log.WarnWithContext(ctx, "获取区块信息失败",
+			log.ErrorWithContext(ctx, "获取区块信息失败",
 				"height:", item.Height,
 				"错误:", err)
+			timeStamp = 0
 		} else {
-			timeStamp = blockInfo.Time
+			timeValue, ok := blockInfo["time"].(float64)
+			if !ok {
+				log.ErrorWithContext(ctx, "区块时间戳类型转换失败", "blockInfo", blockInfo)
+				timeStamp = 0
+			} else {
+				timeStamp = int64(timeValue)
+			}
 			utcTime = time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
 		}
 	}
@@ -458,30 +468,24 @@ func (l *AddressLogic) formatBalanceChange(balanceChange int64) string {
 
 // sortHistoryByTimestamp 按时间戳排序历史记录
 func (l *AddressLogic) sortHistoryByTimestamp(result []electrumx.HistoryItem) {
-	// 按时间戳排序（从新到旧）
-	// 未确认的交易（时间戳为0）排在最前面
-	for i := 0; i < len(result); i++ {
-		for j := i + 1; j < len(result); j++ {
-			iValue := result[i].TimeStamp
-			jValue := result[j].TimeStamp
+	// 使用sort.Slice实现排序，与Python版本保持一致的排序逻辑
+	sort.Slice(result, func(i, j int) bool {
+		iValue := result[i].TimeStamp
+		jValue := result[j].TimeStamp
 
-			// 如果i是未确认交易，继续
-			if iValue == 0 {
-				continue
-			}
-
-			// 如果j是未确认交易，交换
-			if jValue == 0 {
-				result[i], result[j] = result[j], result[i]
-				continue
-			}
-
-			// 按时间戳降序排序
-			if iValue < jValue {
-				result[i], result[j] = result[j], result[i]
-			}
+		// 如果i是未确认交易而j不是，i排前面
+		if iValue == 0 && jValue != 0 {
+			return true
 		}
-	}
+
+		// 如果j是未确认交易而i不是，j排前面
+		if jValue == 0 && iValue != 0 {
+			return false
+		}
+
+		// 都是确认交易或都是未确认交易，按时间戳降序
+		return iValue > jValue
+	})
 }
 
 // GetAddressBalance 获取地址余额

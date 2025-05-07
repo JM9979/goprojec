@@ -212,7 +212,7 @@ func (l *FtLogic) processHistoryItem(ctx context.Context, item interface{}, cont
 	log.DebugWithContextf(ctx, "交易时间信息: timeStamp=%d, utcTime=%s", timeStamp, utcTime)
 
 	// 获取交易详情
-	decodeTx, err := rpcblockchain.CallRPC("getrawtransaction", []interface{}{txHash, 1}, false)
+	decodeTx, err := rpcblockchain.GetRawTransaction(ctx, txHash, true)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取交易详情失败: txHash=%s, 错误=%v", txHash, err)
 		return nil, fmt.Errorf("获取交易详情失败: %v", err)
@@ -262,19 +262,14 @@ func (l *FtLogic) getTxTimeInfo(ctx context.Context, height float64) (int64, str
 	}
 
 	// 已确认的交易，获取区块信息
-	blockInfo, err := rpcblockchain.CallRPC("getblockbyheight", []interface{}{int(height)}, false)
+	blockInfo, err := rpcblockchain.GetBlockByHeight(ctx, int64(height))
 	if err != nil {
 		log.WarnWithContextf(ctx, "获取区块信息失败: %v", err)
 		return 0, ""
 	}
 
-	blockInfoMap, ok := blockInfo.(map[string]interface{})
-	if !ok {
-		return 0, ""
-	}
-
 	// 提取时间戳
-	if ts, ok := blockInfoMap["time"].(float64); ok {
+	if ts, ok := blockInfo["time"].(float64); ok {
 		timeStamp := int64(ts)
 		utcTime := time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
 		return timeStamp, utcTime
@@ -364,7 +359,7 @@ func (l *FtLogic) processTxInputs(ctx context.Context, decodeTxMap map[string]in
 			vinIndex, vinTxid, int(vinVout))
 
 		// 获取输入交易详情
-		vinDecodeTx, err := rpcblockchain.CallRPC("getrawtransaction", []interface{}{vinTxid, 1}, false)
+		vinDecodeTx, err := rpcblockchain.GetRawTransaction(ctx, vinTxid, true)
 		if err != nil {
 			log.WarnWithContextf(ctx, "获取输入交易详情失败: %v", err)
 			continue

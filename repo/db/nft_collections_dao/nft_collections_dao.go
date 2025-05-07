@@ -1,8 +1,10 @@
 package nft_collections_dao
 
 import (
-	"ginproject/repo/db"
+	"context"
+
 	"ginproject/entity/dbtable"
+	"ginproject/repo/db"
 
 	"gorm.io/gorm"
 )
@@ -68,4 +70,91 @@ func (dao *NftCollectionsDAO) GetCollectionsWithPagination(page, pageSize int) (
 	}
 
 	return collections, total, nil
+}
+
+// GetCollectionsByAddressWithPagination 根据创建者地址分页获取集合列表
+func (dao *NftCollectionsDAO) GetCollectionsByAddressWithPagination(ctx context.Context, address string, page, size int) ([]*dbtable.NftCollections, int64, error) {
+	var collections []*dbtable.NftCollections
+	var total int64
+
+	// 计算起始索引
+	offset := page * size
+
+	// 获取总记录数
+	if err := dao.db.WithContext(ctx).
+		Model(&dbtable.NftCollections{}).
+		Where("collection_creator_address = ?", address).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 获取分页数据，按照创建时间倒序排序
+	if err := dao.db.WithContext(ctx).
+		Where("collection_creator_address = ?", address).
+		Order("collection_create_timestamp DESC").
+		Limit(size).
+		Offset(offset).
+		Find(&collections).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return collections, total, nil
+}
+
+// GetAllCollectionsWithPagination 获取所有集合并分页
+func (dao *NftCollectionsDAO) GetAllCollectionsWithPagination(ctx context.Context, page, size int) ([]*dbtable.NftCollections, int64, error) {
+	var collections []*dbtable.NftCollections
+	var total int64
+
+	// 计算起始索引
+	offset := page * size
+
+	// 获取总记录数
+	if err := dao.db.WithContext(ctx).
+		Model(&dbtable.NftCollections{}).
+		Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 获取分页数据，按照创建时间倒序排序
+	if err := dao.db.WithContext(ctx).
+		Order("collection_create_timestamp DESC").
+		Limit(size).
+		Offset(offset).
+		Find(&collections).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return collections, total, nil
+}
+
+// GetDetailCollectionInfo 获取集合详细信息
+func (dao *NftCollectionsDAO) GetDetailCollectionInfo(ctx context.Context, collectionId string) (*dbtable.NftCollections, error) {
+	var collection dbtable.NftCollections
+	err := dao.db.WithContext(ctx).
+		Where("collection_id = ?", collectionId).
+		First(&collection).Error
+	if err != nil {
+		return nil, err
+	}
+	return &collection, nil
+}
+
+// GetCollectionIconAndDescription 获取集合图标和描述
+func (dao *NftCollectionsDAO) GetCollectionIconAndDescription(ctx context.Context, collectionId string) (string, string, error) {
+	var result struct {
+		CollectionIcon        string `gorm:"column:collection_icon"`
+		CollectionDescription string `gorm:"column:collection_description"`
+	}
+
+	err := dao.db.WithContext(ctx).
+		Model(&dbtable.NftCollections{}).
+		Select("collection_icon, collection_description").
+		Where("collection_id = ?", collectionId).
+		First(&result).Error
+	if err != nil {
+		return "", "", err
+	}
+
+	return result.CollectionIcon, result.CollectionDescription, nil
 }

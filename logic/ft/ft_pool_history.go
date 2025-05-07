@@ -3,7 +3,6 @@ package ft
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"ginproject/entity/ft"
@@ -404,10 +403,10 @@ func (l *FtLogic) getTokenInfo(ctx context.Context, voutArray []interface{}) (st
 	return ftAContractId, ftAName, ftADecimal
 }
 
-// formatBalanceChange 格式化余额变化为字符串，添加正负号
-func formatBalanceChange(balance int64) string {
-	if balance > 0 {
-		return "+" + strconv.FormatInt(balance, 10)
+// formatBalanceChange 将余额变化转换为指针类型，支持整数和null值
+func formatBalanceChange(balance int64) *int64 {
+	if balance == 0 {
+		return nil
 	}
-	return strconv.FormatInt(balance, 10)
+	return &balance
 }

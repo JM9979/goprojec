@@ -2,8 +2,10 @@ package electrumx
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"ginproject/entity/electrumx"
 	utility "ginproject/entity/utility"
@@ -703,4 +705,160 @@ func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.Fr
 		"frozen:", frozenBalance.Frozen)
 
 	return frozenBalance, nil
+}
+
+// GetScriptHashUnspent 使用上下文获取指定脚本哈希的未花费交易输出
+func GetScriptHashUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse, error) {
+	// 参数校验
+	if scriptHash == "" {
+		log.ErrorWithContext(ctx, "脚本哈希不能为空")
+		return nil, ErrEmptyScriptHash
+	}
+
+	// 记录调用开始
+	log.InfoWithContext(ctx, "开始获取脚本哈希的UTXO",
+		"scriptHash:", scriptHash)
+
+	// 通过通用调用函数执行RPC请求
+	result, err := CallElectrumXRPC(ctx, "blockchain.scripthash.listunspent", []interface{}{scriptHash})
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取脚本哈希UTXO失败",
+			"scriptHash:", scriptHash,
+			"错误:", err)
+		return nil, fmt.Errorf("获取脚本哈希UTXO失败: %w", err)
+	}
+
+	// 解析响应数据
+	var utxos electrumx.UtxoResponse
+	if err := json.Unmarshal(result, &utxos); err != nil {
+		log.ErrorWithContext(ctx, "解析脚本哈希UTXO失败",
+			"scriptHash:", scriptHash,
+			"错误:", err)
+		return nil, fmt.Errorf("解析脚本哈希UTXO失败: %w", err)
+	}
+
+	// 记录成功获取
+	log.InfoWithContext(ctx, "成功获取脚本哈希UTXO",
+		"scriptHash:", scriptHash,
+		"count:", len(utxos))
+
+	return utxos, nil
+}
+
+// GetScriptHashHistoryWithContext 使用上下文获取指定脚本哈希的交易历史
+func GetScriptHashHistoryWithContext(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
+	// 参数校验
+	if scriptHash == "" {
+		log.ErrorWithContext(ctx, "脚本哈希不能为空")
+		return nil, ErrEmptyScriptHash
+	}
+
+	// 记录调用开始
+	log.InfoWithContext(ctx, "开始获取脚本哈希历史",
+		"scriptHash:", scriptHash)
+
+	// 通过通用调用函数执行RPC请求
+	result, err := CallElectrumXRPC(ctx, "blockchain.scripthash.get_history", []interface{}{scriptHash})
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取脚本哈希历史失败",
+			"scriptHash:", scriptHash,
+			"错误:", err)
+		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
+	}
+
+	// 解析响应数据
+	var history electrumx.ElectrumXHistoryResponse
+	if err := json.Unmarshal(result, &history); err != nil {
+		log.ErrorWithContext(ctx, "解析脚本哈希历史失败",
+			"scriptHash:", scriptHash,
+			"错误:", err)
+		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
+	}
+
+	// 记录成功获取
+	log.InfoWithContext(ctx, "成功获取脚本哈希历史",
+		"scriptHash:", scriptHash,
+		"count:", len(history))
+
+	return history, nil
+}
+
+// GetBlockByHeight 获取指定高度的区块信息
+func GetBlockByHeight(ctx context.Context, height int64) (*struct {
+	Hash   string `json:"hash"`
+	Height int64  `json:"height"`
+	Time   int64  `json:"time"`
+}, error) {
+	// 参数校验
+	if height < 0 {
+		log.ErrorWithContext(ctx, "调用GetBlockByHeight失败: 区块高度不能为负数")
+		return nil, fmt.Errorf("区块高度不能为负数")
+	}
+
+	log.InfoWithContext(ctx, "开始获取区块信息", "height", height)
+
+	// 调用RPC方法获取区块头
+	// 注意：这里调用的是获取区块头的方法，实际项目中可能需要替换为获取完整区块的方法
+	result, err := CallMethod("blockchain.block.header", []interface{}{height})
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取区块头信息失败", "height", height, "error", err)
+		return nil, fmt.Errorf("获取区块头信息失败: %w", err)
+	}
+
+	// 解析区块头信息
+	var headerHex string
+	if err := json.Unmarshal(result, &headerHex); err != nil {
+		log.ErrorWithContext(ctx, "解析区块头信息失败", "height", height, "error", err)
+		return nil, fmt.Errorf("解析区块头信息失败: %w", err)
+	}
+
+	// 解析区块头十六进制数据
+	// 这里简化处理，实际项目中需要根据比特币区块头格式进行正确解析
+	// 区块头格式: Version(4) + PrevBlock(32) + MerkleRoot(32) + Time(4) + Bits(4) + Nonce(4)
+	if len(headerHex) < 160 { // 原始区块头是80字节，十六进制表示为160个字符
+		log.ErrorWithContext(ctx, "区块头数据长度不足", "height", height, "headerHex", headerHex)
+		return nil, fmt.Errorf("区块头数据长度不足")
+	}
+
+	// 解析时间戳(第68-76个字符，对应时间戳字段，需要转换字节序)
+	timeHex := headerHex[68:76]
+	var timeBytes []byte
+	for i := len(timeHex) - 2; i >= 0; i -= 2 {
+		b, err := strconv.ParseUint(timeHex[i:i+2], 16, 8)
+		if err != nil {
+			log.ErrorWithContext(ctx, "解析时间戳失败", "height", height, "timeHex", timeHex, "error", err)
+			return nil, fmt.Errorf("解析时间戳失败: %w", err)
+		}
+		timeBytes = append(timeBytes, byte(b))
+	}
+	timestamp := int64(binary.LittleEndian.Uint32(timeBytes))
+
+	// 获取区块哈希
+	hashResult, err := CallMethod("blockchain.block.header", []interface{}{height, 1})
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取区块哈希失败", "height", height, "error", err)
+		return nil, fmt.Errorf("获取区块哈希失败: %w", err)
+	}
+
+	var hashObj struct {
+		Hash string `json:"hash"`
+	}
+	if err := json.Unmarshal(hashResult, &hashObj); err != nil {
+		log.ErrorWithContext(ctx, "解析区块哈希失败", "height", height, "error", err)
+		return nil, fmt.Errorf("解析区块哈希失败: %w", err)
+	}
+
+	// 构建返回结果
+	blockInfo := &struct {
+		Hash   string `json:"hash"`
+		Height int64  `json:"height"`
+		Time   int64  `json:"time"`
+	}{
+		Hash:   hashObj.Hash,
+		Height: height,
+		Time:   timestamp,
+	}
+
+	log.InfoWithContext(ctx, "成功获取区块信息", "height", height, "hash", blockInfo.Hash, "time", blockInfo.Time)
+	return blockInfo, nil
 }

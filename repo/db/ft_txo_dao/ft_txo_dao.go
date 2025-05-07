@@ -2,7 +2,6 @@ package ft_txo_dao
 
 import (
 	"context"
-	"fmt"
 
 	"ginproject/entity/dbtable"
 	"ginproject/entity/ft"
@@ -178,20 +177,25 @@ func (dao *FtTxoDAO) GetPoolHistoryByPoolId(ctx context.Context, poolId string, 
 
 	// 转换为响应类型
 	for _, result := range queryResults {
+		// 创建用于*int64转换的变量
+		lpBalance := int64(result.FtBalance / 2) // LP代币通常是总量的一半
+		tbcBalance := int64(result.UtxoBalance)
+		ftBalance := int64(result.FtBalance)
+
 		// 根据实际逻辑填充池子历史记录
 		history := ft.TBC20PoolHistoryResponse{
 			Txid:                        result.UtxoTxid,
 			PoolId:                      poolId,
 			ExchangeAddress:             result.FtHolderCombineScript,
-			FtLpBalanceChange:           formatBalanceChange(int64(result.FtBalance / 2)), // LP代币通常是总量的一半
+			FtLpBalanceChange:           formatBalanceChange(lpBalance),
 			TokenPairAId:                "TBC",
 			TokenPairAName:              "TBC",
 			TokenPairADecimal:           6, // TBC默认精度
-			TokenPairAPoolBalanceChange: formatBalanceChange(int64(result.UtxoBalance)),
+			TokenPairAPoolBalanceChange: formatBalanceChange(tbcBalance),
 			TokenPairBId:                result.FtContractId,
 			TokenPairBName:              result.FtName,
 			TokenPairBDecimal:           result.FtDecimal,
-			TokenPairBPoolBalanceChange: formatBalanceChange(int64(result.FtBalance)),
+			TokenPairBPoolBalanceChange: formatBalanceChange(ftBalance),
 		}
 
 		results = append(results, history)
@@ -201,12 +205,12 @@ func (dao *FtTxoDAO) GetPoolHistoryByPoolId(ctx context.Context, poolId string, 
 	return results, nil
 }
 
-// formatBalanceChange 格式化余额变化为字符串，添加正负号
-func formatBalanceChange(balance int64) string {
-	if balance > 0 {
-		return "+" + fmt.Sprintf("%d", balance)
+// formatBalanceChange 将余额变化转换为指针类型，支持整数和null值
+func formatBalanceChange(balance int64) *int64 {
+	if balance == 0 {
+		return nil
 	}
-	return fmt.Sprintf("%d", balance)
+	return &balance
 }
 
 // GetFtContractIdsByHolder 获取指定持有者持有的所有代币合约ID
