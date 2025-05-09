@@ -22,6 +22,7 @@ tbcnode:
   url: "http://develope.tbcdev.xyz:8332"
   user: "tbcuser"
   password: "randompasswd" 
+  timeout: 30 # 连接超时时间(秒)
 
 # ElectrumX RPC配置
 electrumx:
@@ -29,3 +30,5 @@ electrumx:
   port: 50001
   timeout: 10 # 连接超时时间(秒)
   retry_count: 3 # 重试次数 
+  use_tls: false
+  protocol: "tcp"

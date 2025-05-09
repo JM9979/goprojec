@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
+	"ginproject/entity/config"
 	"ginproject/middleware/log"
 )
 
@@ -44,7 +46,7 @@ func Init() error {
 	log.Info("初始化区块链RPC客户端...")
 
 	// 获取并验证配置
-	config := GetRPCConfig()
+	config := config.GetConfig().GetTBCNodeConfig()
 	if config == nil {
 		return fmt.Errorf("获取区块链RPC配置失败")
 	}
@@ -60,7 +62,7 @@ func Init() error {
 // CallRPC 同步调用节点RPC
 func CallRPC(method string, params interface{}, fullResponse bool) (interface{}, error) {
 	// 获取RPC配置
-	config := GetRPCConfig()
+	config := config.GetConfig().GetTBCNodeConfig()
 	if config == nil {
 		return nil, fmt.Errorf("RPC配置未初始化")
 	}
@@ -95,7 +97,7 @@ func CallRPC(method string, params interface{}, fullResponse bool) (interface{},
 
 	// 创建带超时的客户端
 	client := &http.Client{
-		Timeout: config.Timeout,
+		Timeout: time.Duration(config.Timeout) * time.Second,
 	}
 
 	// 记录请求日志

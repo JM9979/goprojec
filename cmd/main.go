@@ -33,7 +33,6 @@ func main() {
 		log.Error("全局初始化失败", "错误:", err)
 		os.Exit(1)
 	}
-
 	// 注册路由
 	registerRoutes(router)
 

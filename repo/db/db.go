@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"ginproject/middleware/conf"
+	"ginproject/entity/config"
 	"ginproject/middleware/log"
 
 	"gorm.io/driver/mysql"
@@ -22,7 +22,7 @@ func Init() error {
 	var err error
 
 	// 获取数据库配置
-	dbConfig := conf.GetDBConfig()
+	dbConfig := config.GetConfig().GetDBConfig()
 	if dbConfig == nil {
 		return fmt.Errorf("数据库配置不存在")
 	}

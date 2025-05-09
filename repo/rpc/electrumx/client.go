@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"ginproject/entity/config"
 	"ginproject/middleware/log"
 )
 
@@ -49,14 +50,14 @@ type ElectrumXClient struct {
 	conn      net.Conn
 	requestID int32
 	mu        sync.Mutex
-	config    *RPCConfig
+	config    *config.ElectrumXConfig
 	connected bool
 }
 
 // NewClient 创建新的ElectrumX客户端
 func NewClient() (*ElectrumXClient, error) {
 	// 获取配置
-	config := GetRPCConfig()
+	config := config.GetConfig().GetElectrumXConfig()
 	if config == nil {
 		return nil, fmt.Errorf("获取ElectrumX配置失败")
 	}
@@ -83,7 +84,7 @@ func (c *ElectrumXClient) Connect() error {
 
 	// 设置连接超时
 	dialer := &net.Dialer{
-		Timeout: c.config.Timeout,
+		Timeout: time.Duration(c.config.Timeout) * time.Second,
 	}
 
 	var conn net.Conn
@@ -162,7 +163,7 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 	log.Debug("发送ElectrumX RPC请求:", "method:", method, "params:", params)
 
 	// 设置读写超时
-	deadline := time.Now().Add(c.config.Timeout)
+	deadline := time.Now().Add(time.Duration(c.config.Timeout) * time.Second)
 	if err := c.conn.SetDeadline(deadline); err != nil {
 		log.Warn("设置连接超时失败:", err)
 	}
@@ -277,7 +278,7 @@ func Init() error {
 	log.Info("初始化ElectrumX RPC客户端...")
 
 	// 获取并验证配置
-	config := GetRPCConfig()
+	config := config.GetConfig().GetElectrumXConfig()
 	if config == nil {
 		return fmt.Errorf("获取ElectrumX RPC配置失败")
 	}
