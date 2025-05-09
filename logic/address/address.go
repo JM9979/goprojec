@@ -50,7 +50,7 @@ func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address strin
 	log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
 
 	// 调用RPC获取UTXO列表
-	utxos, err := rpcex.GetListUnspent(scriptHash)
+	utxos, err := rpcex.GetListUnspent(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取UTXO失败",
 			"address:", address,
@@ -136,7 +136,7 @@ func (l *AddressLogic) getPagedHistory(ctx context.Context, address, scriptHash 
 	err error,
 ) {
 	// 获取交易历史记录
-	historyResponse, err := rpcex.GetScriptHashHistory(scriptHash)
+	historyResponse, err := rpcex.GetScriptHashHistory(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取交易历史失败",
 			"address:", address,
@@ -501,7 +501,7 @@ func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*
 	}
 
 	// 调用RPC获取余额
-	balanceResponse, err := rpcex.GetBalance(scriptHash)
+	balanceResponse, err := rpcex.GetBalance(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址余额失败：RPC调用错误",
 			"address:", address,

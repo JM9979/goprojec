@@ -108,7 +108,7 @@ func (l *FtLogic) getFtLockingScript(ctx context.Context, contractId, address st
 // fetchTransactionHistory 获取交易历史记录
 func (l *FtLogic) fetchTransactionHistory(ctx context.Context, scriptHash string) ([]interface{}, error) {
 	log.InfoWithContextf(ctx, "开始从ElectrumX获取脚本哈希历史: %s", scriptHash)
-	historyResult, err := electrumx.GetTransactionHistory(scriptHash)
+	historyResult, err := electrumx.GetTransactionHistory(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取交易历史失败: %v", err)
 		return nil, fmt.Errorf("获取交易历史失败: %v", err)

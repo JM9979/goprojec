@@ -455,7 +455,7 @@ func (logic *NFTLogic) GetNftHistoryByAddress(ctx context.Context, address strin
 	}
 
 	// 获取交易历史记录
-	history, err := electrumx.GetScriptHashHistoryWithContext(ctx, nftScriptHash)
+	history, err := electrumx.GetScriptHashHistory(ctx, nftScriptHash)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取地址[%s]的交易历史记录失败: %v", address, err)
 		return nil, fmt.Errorf("获取交易历史失败: %v", err)

@@ -135,7 +135,7 @@ func (l *FtLogic) getPoolScriptHash(ctx context.Context, txMap map[string]interf
 
 // getPagedScriptHistory 获取分页的脚本历史记录
 func (l *FtLogic) getPagedScriptHistory(ctx context.Context, scriptHash string, page int, size int) ([]map[string]interface{}, error) {
-	scriptHistory, err := electrumx.GetScriptHashHistoryAsync2(ctx, scriptHash)
+	scriptHistory, err := electrumx.GetScriptHashHistory(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取脚本历史记录失败: %v", err)
 		return nil, err

@@ -37,18 +37,18 @@ func GetDefaultClient() (*ElectrumXClient, error) {
 }
 
 // CallMethod 调用ElectrumX RPC方法的简便函数
-func CallMethod(method string, params []interface{}) (json.RawMessage, error) {
+func CallMethod(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
 	client, err := GetDefaultClient()
 	if err != nil {
 		return nil, fmt.Errorf("获取ElectrumX客户端失败: %w", err)
 	}
 
 	// 记录开始调用日志
-	log.Info("开始调用ElectrumX方法:", method)
+	log.InfoWithContext(ctx, "开始调用ElectrumX方法:", method)
 
 	result, err := client.CallRPC(method, params)
 	if err != nil {
-		log.Error("调用ElectrumX方法失败:", method, "错误:", err)
+		log.ErrorWithContext(ctx, "调用ElectrumX方法失败:", method, "错误:", err)
 		return nil, err
 	}
 
@@ -74,7 +74,7 @@ func CallMethodAsync(ctx context.Context, method string, params []interface{}) <
 			// 继续执行
 		}
 
-		result, err := CallMethod(method, params)
+		result, err := CallMethod(ctx, method, params)
 		resultChan <- AsyncResult{
 			Result: result,
 			Error:  err,
@@ -87,15 +87,16 @@ func CallMethodAsync(ctx context.Context, method string, params []interface{}) <
 // 以下是常用的ElectrumX RPC方法
 
 // GetBlockHeader 获取区块头信息
-func GetBlockHeader(height int) (map[string]interface{}, error) {
-	result, err := CallMethod("blockchain.block.header", []interface{}{height})
-	if err != nil {
-		return nil, err
+func GetBlockHeader(ctx context.Context, height int) (map[string]interface{}, error) {
+	resultChan := CallMethodAsync(ctx, "blockchain.block.header", []interface{}{height})
+	result := <-resultChan
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	var header map[string]interface{}
-	if err := json.Unmarshal(result, &header); err != nil {
-		log.Errorf("解析区块头失败: %v", err)
+	if err := json.Unmarshal(result.Result, &header); err != nil {
+		log.ErrorWithContext(ctx, "解析区块头失败:", err)
 		return nil, fmt.Errorf("解析区块头失败: %w", err)
 	}
 
@@ -103,44 +104,46 @@ func GetBlockHeader(height int) (map[string]interface{}, error) {
 }
 
 // GetBalance 获取地址余额
-func GetBalance(scriptHash string) (*electrumx.BalanceResponse, error) {
+func GetBalance(ctx context.Context, scriptHash string) (*electrumx.BalanceResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Error("调用GetBalance失败: scriptHash不能为空")
+		log.ErrorWithContext(ctx, "调用GetBalance失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Info("开始获取脚本哈希余额:", scriptHash)
+	log.InfoWithContext(ctx, "开始获取脚本哈希余额:", scriptHash)
 
-	// 调用RPC方法
-	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{scriptHash})
-	if err != nil {
-		log.Error("获取脚本哈希余额失败:", err)
-		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", err)
+	// 调用RPC方法（改为异步）
+	resultChan := CallMethodAsync(ctx, "blockchain.scripthash.get_balance", []interface{}{scriptHash})
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContext(ctx, "获取脚本哈希余额失败:", result.Error)
+		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", result.Error)
 	}
 
 	// 解析响应
 	var balance electrumx.BalanceResponse
-	if err := json.Unmarshal(result, &balance); err != nil {
-		log.Error("解析脚本哈希余额失败:", err, "原始数据:", string(result))
+	if err := json.Unmarshal(result.Result, &balance); err != nil {
+		log.ErrorWithContext(ctx, "解析脚本哈希余额失败:", err, "原始数据:", string(result.Result))
 		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
 	}
 
-	log.Info("成功获取脚本哈希余额: 已确认=", balance.Confirmed, "未确认=", balance.Unconfirmed)
+	log.InfoWithContext(ctx, "成功获取脚本哈希余额: 已确认=", balance.Confirmed, "未确认=", balance.Unconfirmed)
 	return &balance, nil
 }
 
 // GetTransactionHistory 获取地址交易历史
-func GetTransactionHistory(address string) ([]interface{}, error) {
-	result, err := CallMethod("blockchain.scripthash.get_history", []interface{}{address})
-	if err != nil {
-		return nil, err
+func GetTransactionHistory(ctx context.Context, address string) ([]interface{}, error) {
+	resultChan := CallMethodAsync(ctx, "blockchain.scripthash.get_history", []interface{}{address})
+	result := <-resultChan
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	var history []interface{}
-	if err := json.Unmarshal(result, &history); err != nil {
-		log.Errorf("解析交易历史失败: %v", err)
+	if err := json.Unmarshal(result.Result, &history); err != nil {
+		log.ErrorWithContext(ctx, "解析交易历史失败:", err)
 		return nil, fmt.Errorf("解析交易历史失败: %w", err)
 	}
 
@@ -148,15 +151,16 @@ func GetTransactionHistory(address string) ([]interface{}, error) {
 }
 
 // BroadcastTransaction 广播原始交易
-func BroadcastTransaction(rawTx string) (string, error) {
-	result, err := CallMethod("blockchain.transaction.broadcast", []interface{}{rawTx})
-	if err != nil {
-		return "", err
+func BroadcastTransaction(ctx context.Context, rawTx string) (string, error) {
+	resultChan := CallMethodAsync(ctx, "blockchain.transaction.broadcast", []interface{}{rawTx})
+	result := <-resultChan
+	if result.Error != nil {
+		return "", result.Error
 	}
 
 	var txid string
-	if err := json.Unmarshal(result, &txid); err != nil {
-		log.Errorf("解析交易ID失败: %v", err)
+	if err := json.Unmarshal(result.Result, &txid); err != nil {
+		log.ErrorWithContext(ctx, "解析交易ID失败:", err)
 		return "", fmt.Errorf("解析交易ID失败: %w", err)
 	}
 
@@ -164,15 +168,16 @@ func BroadcastTransaction(rawTx string) (string, error) {
 }
 
 // GetTransaction 获取交易详情
-func GetTransaction(txid string) (map[string]interface{}, error) {
-	result, err := CallMethod("blockchain.transaction.get", []interface{}{txid, true})
-	if err != nil {
-		return nil, err
+func GetTransaction(ctx context.Context, txid string) (map[string]interface{}, error) {
+	resultChan := CallMethodAsync(ctx, "blockchain.transaction.get", []interface{}{txid, true})
+	result := <-resultChan
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	var tx map[string]interface{}
-	if err := json.Unmarshal(result, &tx); err != nil {
-		log.Errorf("解析交易详情失败: %v", err)
+	if err := json.Unmarshal(result.Result, &tx); err != nil {
+		log.ErrorWithContext(ctx, "解析交易详情失败:", err)
 		return nil, fmt.Errorf("解析交易详情失败: %w", err)
 	}
 
@@ -180,15 +185,16 @@ func GetTransaction(txid string) (map[string]interface{}, error) {
 }
 
 // EstimateFee 估算交易手续费
-func EstimateFee(blocks int) (float64, error) {
-	result, err := CallMethod("blockchain.estimatefee", []interface{}{blocks})
-	if err != nil {
-		return 0, err
+func EstimateFee(ctx context.Context, blocks int) (float64, error) {
+	resultChan := CallMethodAsync(ctx, "blockchain.estimatefee", []interface{}{blocks})
+	result := <-resultChan
+	if result.Error != nil {
+		return 0, result.Error
 	}
 
 	var fee float64
-	if err := json.Unmarshal(result, &fee); err != nil {
-		log.Errorf("解析手续费失败: %v", err)
+	if err := json.Unmarshal(result.Result, &fee); err != nil {
+		log.ErrorWithContext(ctx, "解析手续费失败:", err)
 		return 0, fmt.Errorf("解析手续费失败: %w", err)
 	}
 
@@ -196,15 +202,16 @@ func EstimateFee(blocks int) (float64, error) {
 }
 
 // ServerVersion 获取服务器版本信息
-func ServerVersion() ([]interface{}, error) {
-	result, err := CallMethod("server.version", []interface{}{"electrumx-client", "1.4"})
-	if err != nil {
-		return nil, err
+func ServerVersion(ctx context.Context) ([]interface{}, error) {
+	resultChan := CallMethodAsync(ctx, "server.version", []interface{}{"electrumx-client", "1.4"})
+	result := <-resultChan
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	var version []interface{}
-	if err := json.Unmarshal(result, &version); err != nil {
-		log.Errorf("解析服务器版本信息失败: %v", err)
+	if err := json.Unmarshal(result.Result, &version); err != nil {
+		log.ErrorWithContext(ctx, "解析服务器版本信息失败:", err)
 		return nil, fmt.Errorf("解析服务器版本信息失败: %w", err)
 	}
 
@@ -212,15 +219,16 @@ func ServerVersion() ([]interface{}, error) {
 }
 
 // ServerPeers 获取服务器的对等节点信息
-func ServerPeers() ([]interface{}, error) {
-	result, err := CallMethod("server.peers.subscribe", []interface{}{})
-	if err != nil {
-		return nil, err
+func ServerPeers(ctx context.Context) ([]interface{}, error) {
+	resultChan := CallMethodAsync(ctx, "server.peers.subscribe", []interface{}{})
+	result := <-resultChan
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	var peers []interface{}
-	if err := json.Unmarshal(result, &peers); err != nil {
-		log.Errorf("解析对等节点信息失败: %v", err)
+	if err := json.Unmarshal(result.Result, &peers); err != nil {
+		log.ErrorWithContext(ctx, "解析对等节点信息失败:", err)
 		return nil, fmt.Errorf("解析对等节点信息失败: %w", err)
 	}
 
@@ -228,155 +236,234 @@ func ServerPeers() ([]interface{}, error) {
 }
 
 // ServerFeatures 获取服务器特性
-func ServerFeatures() (map[string]interface{}, error) {
-	result, err := CallMethod("server.features", []interface{}{})
-	if err != nil {
-		return nil, err
+func ServerFeatures(ctx context.Context) (map[string]interface{}, error) {
+	resultChan := CallMethodAsync(ctx, "server.features", []interface{}{})
+	result := <-resultChan
+	if result.Error != nil {
+		return nil, result.Error
 	}
 
 	var features map[string]interface{}
-	if err := json.Unmarshal(result, &features); err != nil {
-		log.Errorf("解析服务器特性失败: %v", err)
+	if err := json.Unmarshal(result.Result, &features); err != nil {
+		log.ErrorWithContext(ctx, "解析服务器特性失败:", err)
 		return nil, fmt.Errorf("解析服务器特性失败: %w", err)
 	}
 
 	return features, nil
 }
 
-// GetScriptHashHistory 获取指定脚本哈希的交易历史
-func GetScriptHashHistory(scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
-	// 参数校验
-	if len(scriptHash) == 0 {
-		log.Error("调用GetScriptHashHistory失败: scriptHash不能为空")
-		return nil, fmt.Errorf("scriptHash不能为空")
-	}
-
-	// 记录开始调用日志
-	log.Info("开始获取脚本哈希历史:", scriptHash)
-
-	// 调用RPC方法
-	result, err := CallMethod("blockchain.scripthash.get_history", []interface{}{scriptHash})
-	if err != nil {
-		log.Error("获取脚本哈希历史失败:", err)
-		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
-	}
-
-	// 解析响应
-	var history electrumx.ElectrumXHistoryResponse
-	if err := json.Unmarshal(result, &history); err != nil {
-		log.Error("解析脚本哈希历史失败:", err, "原始数据:", string(result))
-		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
-	}
-
-	log.Info("成功获取脚本哈希历史, 共", len(history), "条记录")
-	return history, nil
-}
-
-// GetScriptHashHistoryAsync 异步获取指定脚本哈希的交易历史
-func GetScriptHashHistoryAsync(ctx context.Context, scriptHash string) <-chan AsyncHistoryResult {
-	resultChan := make(chan AsyncHistoryResult, 1)
-
-	go func() {
-		defer close(resultChan)
-
-		// 检查上下文是否已取消
-		select {
-		case <-ctx.Done():
-			resultChan <- AsyncHistoryResult{
-				Result: nil,
-				Error:  ctx.Err(),
-			}
-			return
-		default:
-			// 继续执行
-		}
-
-		history, err := GetScriptHashHistory(scriptHash)
-		resultChan <- AsyncHistoryResult{
-			Result: history,
-			Error:  err,
-		}
-	}()
-
-	return resultChan
-}
-
-// AsyncHistoryResult 表示异步获取历史记录的结果
-type AsyncHistoryResult struct {
-	Result electrumx.ElectrumXHistoryResponse
-	Error  error
-}
-
 // GetListUnspent 获取指定脚本哈希的未花费交易输出
-func GetListUnspent(scriptHash string) (electrumx.UtxoResponse, error) {
+func GetListUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse, error) {
 	// 参数校验
 	if len(scriptHash) == 0 {
-		log.Error("调用GetListUnspent失败: scriptHash不能为空")
+		log.ErrorWithContext(ctx, "调用GetListUnspent失败: scriptHash不能为空")
 		return nil, fmt.Errorf("scriptHash不能为空")
 	}
 
 	// 记录开始调用日志
-	log.Info("开始获取脚本哈希的UTXO:", scriptHash)
+	log.InfoWithContext(ctx, "开始获取脚本哈希的UTXO:", scriptHash)
 
-	// 调用RPC方法
-	result, err := CallMethod("blockchain.scripthash.listunspent", []interface{}{scriptHash})
-	if err != nil {
-		log.Error("获取UTXO失败:", err)
-		return nil, fmt.Errorf("获取UTXO失败: %w", err)
+	// 调用RPC方法（改为异步）
+	resultChan := CallMethodAsync(ctx, "blockchain.scripthash.listunspent", []interface{}{scriptHash})
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContext(ctx, "获取UTXO失败:", result.Error)
+		return nil, fmt.Errorf("获取UTXO失败: %w", result.Error)
 	}
 
 	// 解析响应
 	var utxos electrumx.UtxoResponse
-	if err := json.Unmarshal(result, &utxos); err != nil {
-		log.Error("解析UTXO响应失败:", err)
+	if err := json.Unmarshal(result.Result, &utxos); err != nil {
+		log.ErrorWithContext(ctx, "解析UTXO响应失败:", err)
 		return nil, fmt.Errorf("解析UTXO响应失败: %w", err)
 	}
 
-	log.Info("成功获取UTXO, 数量:", len(utxos))
+	log.InfoWithContext(ctx, "成功获取UTXO, 数量:", len(utxos))
 	return utxos, nil
 }
 
-// AsyncUtxoResult 异步UTXO结果
-type AsyncUtxoResult struct {
-	Result electrumx.UtxoResponse
-	Error  error
+// GetScriptHashBalance 获取指定脚本哈希的余额
+func GetScriptHashBalance(ctx context.Context, scriptHash string) (*electrumx.BalanceResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.ErrorWithContext(ctx, "调用GetScriptHashBalance失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
+
+	// 记录开始调用日志
+	log.InfoWithContext(ctx, "开始获取脚本哈希余额:", scriptHash)
+
+	// 调用RPC方法（改为异步）
+	resultChan := CallMethodAsync(ctx, "blockchain.scripthash.get_balance", []interface{}{scriptHash})
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContext(ctx, "获取脚本哈希余额失败:", result.Error)
+		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", result.Error)
+	}
+
+	// 解析响应
+	var balance electrumx.BalanceResponse
+	if err := json.Unmarshal(result.Result, &balance); err != nil {
+		log.ErrorWithContext(ctx, "解析脚本哈希余额失败:", err, "原始数据:", string(result.Result))
+		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
+	}
+
+	log.InfoWithContext(ctx, "成功获取脚本哈希余额: 已确认=", balance.Confirmed, "未确认=", balance.Unconfirmed)
+	return &balance, nil
 }
 
-// GetListUnspentAsync 异步获取指定脚本哈希的未花费交易输出
-func GetListUnspentAsync(ctx context.Context, scriptHash string) <-chan AsyncUtxoResult {
-	resultChan := make(chan AsyncUtxoResult, 1)
+// GetScriptHashFrozenBalance 获取指定脚本哈希的冻结余额
+func GetScriptHashFrozenBalance(ctx context.Context, scriptHash string) (*electrumx.FrozenBalanceResponse, error) {
+	// 参数校验
+	if len(scriptHash) == 0 {
+		log.ErrorWithContext(ctx, "调用GetScriptHashFrozenBalance失败: scriptHash不能为空")
+		return nil, fmt.Errorf("scriptHash不能为空")
+	}
 
-	go func() {
-		defer close(resultChan)
+	// 记录开始调用日志
+	log.InfoWithContext(ctx, "开始获取脚本哈希冻结余额:", scriptHash)
 
-		// 检查上下文是否已取消
-		select {
-		case <-ctx.Done():
-			resultChan <- AsyncUtxoResult{
-				Result: nil,
-				Error:  ctx.Err(),
-			}
-			return
-		default:
-			// 继续执行
+	// 调用RPC方法（改为异步）
+	resultChan := CallMethodAsync(ctx, "blockchain.scripthash.get_frozen_balance", []interface{}{scriptHash})
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContext(ctx, "获取脚本哈希冻结余额失败:", result.Error)
+		return nil, fmt.Errorf("获取脚本哈希冻结余额失败: %w", result.Error)
+	}
+
+	// 解析响应
+	var frozenBalance electrumx.FrozenBalanceResponse
+	if err := json.Unmarshal(result.Result, &frozenBalance); err != nil {
+		log.ErrorWithContext(ctx, "解析脚本哈希冻结余额失败:", err, "原始数据:", string(result.Result))
+		return nil, fmt.Errorf("解析脚本哈希冻结余额失败: %w", err)
+	}
+
+	log.InfoWithContext(ctx, "成功获取脚本哈希冻结余额: 冻结=", frozenBalance.Frozen)
+	return &frozenBalance, nil
+}
+
+// CallElectrumXRPC 通用的ElectrumX RPC调用函数，支持上下文控制
+func CallElectrumXRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
+	// 记录开始调用日志
+	log.InfoWithContext(ctx, "开始调用ElectrumX RPC",
+		"method:", method,
+		"params:", params)
+
+	// 使用异步方式调用
+	resultChan := CallMethodAsync(ctx, method, params)
+
+	// 等待结果
+	select {
+	case <-ctx.Done():
+		// 上下文已取消（超时或其他原因）
+		log.WarnWithContext(ctx, "ElectrumX RPC调用已取消",
+			"method:", method,
+			"错误:", ctx.Err())
+		return nil, ctx.Err()
+	case result := <-resultChan:
+		// 收到结果
+		if result.Error != nil {
+			log.ErrorWithContext(ctx, "ElectrumX RPC调用失败",
+				"method:", method,
+				"错误:", result.Error)
+			return nil, result.Error
 		}
 
-		result, err := GetListUnspent(scriptHash)
-		resultChan <- AsyncUtxoResult{
-			Result: result,
-			Error:  err,
-		}
-	}()
+		// 记录成功调用
+		log.InfoWithContext(ctx, "ElectrumX RPC调用成功",
+			"method:", method,
+			"responseSize:", len(result.Result))
+		return result.Result, nil
+	}
+}
 
-	return resultChan
+// GetBlockByHeight 获取指定高度的区块信息
+func GetBlockByHeight(ctx context.Context, height int64) (*struct {
+	Hash   string `json:"hash"`
+	Height int64  `json:"height"`
+	Time   int64  `json:"time"`
+}, error) {
+	// 参数校验
+	if height < 0 {
+		log.ErrorWithContext(ctx, "调用GetBlockByHeight失败: 区块高度不能为负数")
+		return nil, fmt.Errorf("区块高度不能为负数")
+	}
+
+	log.InfoWithContext(ctx, "开始获取区块信息", "height", height)
+
+	// 调用RPC方法获取区块头（改为异步）
+	resultChan := CallMethodAsync(ctx, "blockchain.block.header", []interface{}{height})
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContext(ctx, "获取区块头信息失败", "height", height, "error", result.Error)
+		return nil, fmt.Errorf("获取区块头信息失败: %w", result.Error)
+	}
+
+	// 解析区块头信息
+	var headerHex string
+	if err := json.Unmarshal(result.Result, &headerHex); err != nil {
+		log.ErrorWithContext(ctx, "解析区块头信息失败", "height", height, "error", err)
+		return nil, fmt.Errorf("解析区块头信息失败: %w", err)
+	}
+
+	// 解析区块头十六进制数据
+	// 这里简化处理，实际项目中需要根据比特币区块头格式进行正确解析
+	// 区块头格式: Version(4) + PrevBlock(32) + MerkleRoot(32) + Time(4) + Bits(4) + Nonce(4)
+	if len(headerHex) < 160 { // 原始区块头是80字节，十六进制表示为160个字符
+		log.ErrorWithContext(ctx, "区块头数据长度不足", "height", height, "headerHex", headerHex)
+		return nil, fmt.Errorf("区块头数据长度不足")
+	}
+
+	// 解析时间戳(第68-76个字符，对应时间戳字段，需要转换字节序)
+	timeHex := headerHex[68:76]
+	var timeBytes []byte
+	for i := len(timeHex) - 2; i >= 0; i -= 2 {
+		b, err := strconv.ParseUint(timeHex[i:i+2], 16, 8)
+		if err != nil {
+			log.ErrorWithContext(ctx, "解析时间戳失败", "height", height, "timeHex", timeHex, "error", err)
+			return nil, fmt.Errorf("解析时间戳失败: %w", err)
+		}
+		timeBytes = append(timeBytes, byte(b))
+	}
+	timestamp := int64(binary.LittleEndian.Uint32(timeBytes))
+
+	// 获取区块哈希（改为异步）
+	hashResultChan := CallMethodAsync(ctx, "blockchain.block.header", []interface{}{height, 1})
+	hashResult := <-hashResultChan
+	if hashResult.Error != nil {
+		log.ErrorWithContext(ctx, "获取区块哈希失败", "height", height, "error", hashResult.Error)
+		return nil, fmt.Errorf("获取区块哈希失败: %w", hashResult.Error)
+	}
+
+	var hashObj struct {
+		Hash string `json:"hash"`
+	}
+	if err := json.Unmarshal(hashResult.Result, &hashObj); err != nil {
+		log.ErrorWithContext(ctx, "解析区块哈希失败", "height", height, "error", err)
+		return nil, fmt.Errorf("解析区块哈希失败: %w", err)
+	}
+
+	// 构建返回结果
+	blockInfo := &struct {
+		Hash   string `json:"hash"`
+		Height int64  `json:"height"`
+		Time   int64  `json:"time"`
+	}{
+		Hash:   hashObj.Hash,
+		Height: height,
+		Time:   timestamp,
+	}
+
+	log.InfoWithContext(ctx, "成功获取区块信息", "height", height, "hash", blockInfo.Hash, "time", blockInfo.Time)
+	return blockInfo, nil
 }
 
 // AddressToScriptHash 将比特币地址转换为脚本哈希
-func AddressToScriptHash(address string) (string, error) {
+func AddressToScriptHash(ctx context.Context, address string) (string, error) {
 	// 调用工具函数进行转换
 	scriptHash, err := utility.AddressToScriptHash(address)
 	if err != nil {
-		log.Error("地址转换为脚本哈希失败:", err)
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败:", err)
 		return "", fmt.Errorf("地址转换为脚本哈希失败: %w", err)
 	}
 
@@ -399,7 +486,7 @@ func GetUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse,
 	}
 
 	// 调用ElectrumX RPC获取UTXO列表
-	utxos, err := GetListUnspent(scriptHash)
+	utxos, err := GetListUnspent(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取UTXO失败",
 			"scriptHash:", scriptHash,
@@ -414,82 +501,19 @@ func GetUnspent(ctx context.Context, scriptHash string) (electrumx.UtxoResponse,
 }
 
 // ConvertAddressToScript 将WIF地址转换为脚本哈希
-func ConvertAddressToScript(address string) (string, error) {
+func ConvertAddressToScript(ctx context.Context, address string) (string, error) {
 	// 调用AddressToScriptHash函数进行转换
-	scriptHash, err := AddressToScriptHash(address)
+	scriptHash, err := AddressToScriptHash(ctx, address)
 	if err != nil {
-		log.Error("地址转换为脚本哈希失败:", err)
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败:", err)
 		return "", err
 	}
 
 	return scriptHash, nil
 }
 
-// CallElectrumXRPC 通用的ElectrumX RPC调用函数，支持上下文控制
-func CallElectrumXRPC(ctx context.Context, method string, params []interface{}) (json.RawMessage, error) {
-	// 创建结果通道
-	resultChan := make(chan struct {
-		result json.RawMessage
-		err    error
-	}, 1)
-
-	// 在goroutine中执行调用，避免阻塞
-	go func() {
-		// 记录开始调用日志
-		log.InfoWithContext(ctx, "开始调用ElectrumX RPC",
-			"method:", method,
-			"params:", params)
-
-		// 获取客户端
-		client, err := GetDefaultClient()
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取ElectrumX客户端失败",
-				"method:", method,
-				"错误:", err)
-			resultChan <- struct {
-				result json.RawMessage
-				err    error
-			}{nil, fmt.Errorf("获取ElectrumX客户端失败: %w", err)}
-			return
-		}
-
-		// 执行RPC调用
-		result, err := client.CallRPC(method, params)
-
-		// 发送结果到通道
-		resultChan <- struct {
-			result json.RawMessage
-			err    error
-		}{result, err}
-	}()
-
-	// 等待结果或上下文取消
-	select {
-	case <-ctx.Done():
-		// 上下文已取消（超时或其他原因）
-		log.WarnWithContext(ctx, "ElectrumX RPC调用已取消",
-			"method:", method,
-			"错误:", ctx.Err())
-		return nil, ctx.Err()
-	case result := <-resultChan:
-		// 收到结果
-		if result.err != nil {
-			log.ErrorWithContext(ctx, "ElectrumX RPC调用失败",
-				"method:", method,
-				"错误:", result.err)
-			return nil, result.err
-		}
-
-		// 记录成功调用
-		log.InfoWithContext(ctx, "ElectrumX RPC调用成功",
-			"method:", method,
-			"responseSize:", len(result.result))
-		return result.result, nil
-	}
-}
-
-// GetScriptHashHistoryAsync2 使用增强的方式异步获取指定脚本哈希的交易历史
-func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
+// GetScriptHashHistory 使用上下文获取指定脚本哈希的交易历史
+func GetScriptHashHistory(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
 	// 参数校验
 	if scriptHash == "" {
 		log.ErrorWithContext(ctx, "脚本哈希不能为空")
@@ -500,7 +524,7 @@ func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electru
 	log.InfoWithContext(ctx, "开始获取脚本哈希历史",
 		"scriptHash:", scriptHash)
 
-	// 通过新的通用调用函数执行RPC请求
+	// 通过通用调用函数执行RPC请求
 	result, err := CallElectrumXRPC(ctx, "blockchain.scripthash.get_history", []interface{}{scriptHash})
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取脚本哈希历史失败",
@@ -521,73 +545,9 @@ func GetScriptHashHistoryAsync2(ctx context.Context, scriptHash string) (electru
 	// 记录成功获取
 	log.InfoWithContext(ctx, "成功获取脚本哈希历史",
 		"scriptHash:", scriptHash,
-		"recordCount:", len(history))
+		"count:", len(history))
 
 	return history, nil
-}
-
-// GetScriptHashBalance 获取指定脚本哈希的余额
-func GetScriptHashBalance(scriptHash string) (*electrumx.BalanceResponse, error) {
-	// 参数校验
-	if len(scriptHash) == 0 {
-		log.Error("调用GetScriptHashBalance失败: scriptHash不能为空")
-		return nil, fmt.Errorf("scriptHash不能为空")
-	}
-
-	// 记录开始调用日志
-	log.Info("开始获取脚本哈希余额:", scriptHash)
-
-	// 调用RPC方法
-	result, err := CallMethod("blockchain.scripthash.get_balance", []interface{}{scriptHash})
-	if err != nil {
-		log.Error("获取脚本哈希余额失败:", err)
-		return nil, fmt.Errorf("获取脚本哈希余额失败: %w", err)
-	}
-
-	// 解析响应
-	var balance electrumx.BalanceResponse
-	if err := json.Unmarshal(result, &balance); err != nil {
-		log.Error("解析脚本哈希余额失败:", err, "原始数据:", string(result))
-		return nil, fmt.Errorf("解析脚本哈希余额失败: %w", err)
-	}
-
-	log.Info("成功获取脚本哈希余额: 已确认=", balance.Confirmed, "未确认=", balance.Unconfirmed)
-	return &balance, nil
-}
-
-// GetScriptHashBalanceAsync 异步获取指定脚本哈希的余额
-func GetScriptHashBalanceAsync(ctx context.Context, scriptHash string) <-chan AsyncBalanceResult {
-	resultChan := make(chan AsyncBalanceResult, 1)
-
-	go func() {
-		defer close(resultChan)
-
-		// 检查上下文是否已取消
-		select {
-		case <-ctx.Done():
-			resultChan <- AsyncBalanceResult{
-				Result: nil,
-				Error:  ctx.Err(),
-			}
-			return
-		default:
-			// 继续执行
-		}
-
-		balance, err := GetScriptHashBalance(scriptHash)
-		resultChan <- AsyncBalanceResult{
-			Result: balance,
-			Error:  err,
-		}
-	}()
-
-	return resultChan
-}
-
-// AsyncBalanceResult 表示异步获取余额的结果
-type AsyncBalanceResult struct {
-	Result *electrumx.BalanceResponse
-	Error  error
 }
 
 // GetAddressBalance 获取比特币地址的余额
@@ -603,7 +563,7 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 		"address:", address)
 
 	// 将地址转换为脚本哈希
-	scriptHash, err := AddressToScriptHash(address)
+	scriptHash, err := AddressToScriptHash(ctx, address)
 	if err != nil {
 		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败",
 			"address:", address,
@@ -612,7 +572,7 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 	}
 
 	// 获取脚本哈希余额
-	balance, err := GetScriptHashBalance(scriptHash)
+	balance, err := GetScriptHashBalance(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址余额失败",
 			"address:", address,
@@ -640,35 +600,6 @@ func GetAddressBalance(ctx context.Context, address string) (*electrumx.AddressB
 	return response, nil
 }
 
-// GetScriptHashFrozenBalance 获取指定脚本哈希的冻结余额
-func GetScriptHashFrozenBalance(scriptHash string) (*electrumx.FrozenBalanceResponse, error) {
-	// 参数校验
-	if len(scriptHash) == 0 {
-		log.Error("调用GetScriptHashFrozenBalance失败: scriptHash不能为空")
-		return nil, fmt.Errorf("scriptHash不能为空")
-	}
-
-	// 记录开始调用日志
-	log.Info("开始获取脚本哈希冻结余额:", scriptHash)
-
-	// 调用RPC方法
-	result, err := CallMethod("blockchain.scripthash.get_frozen_balance", []interface{}{scriptHash})
-	if err != nil {
-		log.Error("获取脚本哈希冻结余额失败:", err)
-		return nil, fmt.Errorf("获取脚本哈希冻结余额失败: %w", err)
-	}
-
-	// 解析响应
-	var frozenBalance electrumx.FrozenBalanceResponse
-	if err := json.Unmarshal(result, &frozenBalance); err != nil {
-		log.Error("解析脚本哈希冻结余额失败:", err, "原始数据:", string(result))
-		return nil, fmt.Errorf("解析脚本哈希冻结余额失败: %w", err)
-	}
-
-	log.Info("成功获取脚本哈希冻结余额: 冻结=", frozenBalance.Frozen)
-	return &frozenBalance, nil
-}
-
 // GetAddressFrozenBalance 获取比特币地址的冻结余额
 func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.FrozenBalanceResponse, error) {
 	// 参数校验
@@ -682,7 +613,7 @@ func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.Fr
 		"address:", address)
 
 	// 将地址转换为脚本哈希
-	scriptHash, err := AddressToScriptHash(address)
+	scriptHash, err := AddressToScriptHash(ctx, address)
 	if err != nil {
 		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败",
 			"address:", address,
@@ -691,7 +622,7 @@ func GetAddressFrozenBalance(ctx context.Context, address string) (*electrumx.Fr
 	}
 
 	// 获取脚本哈希冻结余额
-	frozenBalance, err := GetScriptHashFrozenBalance(scriptHash)
+	frozenBalance, err := GetScriptHashFrozenBalance(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址冻结余额失败",
 			"address:", address,
@@ -743,122 +674,4 @@ func GetScriptHashUnspent(ctx context.Context, scriptHash string) (electrumx.Utx
 		"count:", len(utxos))
 
 	return utxos, nil
-}
-
-// GetScriptHashHistoryWithContext 使用上下文获取指定脚本哈希的交易历史
-func GetScriptHashHistoryWithContext(ctx context.Context, scriptHash string) (electrumx.ElectrumXHistoryResponse, error) {
-	// 参数校验
-	if scriptHash == "" {
-		log.ErrorWithContext(ctx, "脚本哈希不能为空")
-		return nil, ErrEmptyScriptHash
-	}
-
-	// 记录调用开始
-	log.InfoWithContext(ctx, "开始获取脚本哈希历史",
-		"scriptHash:", scriptHash)
-
-	// 通过通用调用函数执行RPC请求
-	result, err := CallElectrumXRPC(ctx, "blockchain.scripthash.get_history", []interface{}{scriptHash})
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取脚本哈希历史失败",
-			"scriptHash:", scriptHash,
-			"错误:", err)
-		return nil, fmt.Errorf("获取脚本哈希历史失败: %w", err)
-	}
-
-	// 解析响应数据
-	var history electrumx.ElectrumXHistoryResponse
-	if err := json.Unmarshal(result, &history); err != nil {
-		log.ErrorWithContext(ctx, "解析脚本哈希历史失败",
-			"scriptHash:", scriptHash,
-			"错误:", err)
-		return nil, fmt.Errorf("解析脚本哈希历史失败: %w", err)
-	}
-
-	// 记录成功获取
-	log.InfoWithContext(ctx, "成功获取脚本哈希历史",
-		"scriptHash:", scriptHash,
-		"count:", len(history))
-
-	return history, nil
-}
-
-// GetBlockByHeight 获取指定高度的区块信息
-func GetBlockByHeight(ctx context.Context, height int64) (*struct {
-	Hash   string `json:"hash"`
-	Height int64  `json:"height"`
-	Time   int64  `json:"time"`
-}, error) {
-	// 参数校验
-	if height < 0 {
-		log.ErrorWithContext(ctx, "调用GetBlockByHeight失败: 区块高度不能为负数")
-		return nil, fmt.Errorf("区块高度不能为负数")
-	}
-
-	log.InfoWithContext(ctx, "开始获取区块信息", "height", height)
-
-	// 调用RPC方法获取区块头
-	// 注意：这里调用的是获取区块头的方法，实际项目中可能需要替换为获取完整区块的方法
-	result, err := CallMethod("blockchain.block.header", []interface{}{height})
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取区块头信息失败", "height", height, "error", err)
-		return nil, fmt.Errorf("获取区块头信息失败: %w", err)
-	}
-
-	// 解析区块头信息
-	var headerHex string
-	if err := json.Unmarshal(result, &headerHex); err != nil {
-		log.ErrorWithContext(ctx, "解析区块头信息失败", "height", height, "error", err)
-		return nil, fmt.Errorf("解析区块头信息失败: %w", err)
-	}
-
-	// 解析区块头十六进制数据
-	// 这里简化处理，实际项目中需要根据比特币区块头格式进行正确解析
-	// 区块头格式: Version(4) + PrevBlock(32) + MerkleRoot(32) + Time(4) + Bits(4) + Nonce(4)
-	if len(headerHex) < 160 { // 原始区块头是80字节，十六进制表示为160个字符
-		log.ErrorWithContext(ctx, "区块头数据长度不足", "height", height, "headerHex", headerHex)
-		return nil, fmt.Errorf("区块头数据长度不足")
-	}
-
-	// 解析时间戳(第68-76个字符，对应时间戳字段，需要转换字节序)
-	timeHex := headerHex[68:76]
-	var timeBytes []byte
-	for i := len(timeHex) - 2; i >= 0; i -= 2 {
-		b, err := strconv.ParseUint(timeHex[i:i+2], 16, 8)
-		if err != nil {
-			log.ErrorWithContext(ctx, "解析时间戳失败", "height", height, "timeHex", timeHex, "error", err)
-			return nil, fmt.Errorf("解析时间戳失败: %w", err)
-		}
-		timeBytes = append(timeBytes, byte(b))
-	}
-	timestamp := int64(binary.LittleEndian.Uint32(timeBytes))
-
-	// 获取区块哈希
-	hashResult, err := CallMethod("blockchain.block.header", []interface{}{height, 1})
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取区块哈希失败", "height", height, "error", err)
-		return nil, fmt.Errorf("获取区块哈希失败: %w", err)
-	}
-
-	var hashObj struct {
-		Hash string `json:"hash"`
-	}
-	if err := json.Unmarshal(hashResult, &hashObj); err != nil {
-		log.ErrorWithContext(ctx, "解析区块哈希失败", "height", height, "error", err)
-		return nil, fmt.Errorf("解析区块哈希失败: %w", err)
-	}
-
-	// 构建返回结果
-	blockInfo := &struct {
-		Hash   string `json:"hash"`
-		Height int64  `json:"height"`
-		Time   int64  `json:"time"`
-	}{
-		Hash:   hashObj.Hash,
-		Height: height,
-		Time:   timestamp,
-	}
-
-	log.InfoWithContext(ctx, "成功获取区块信息", "height", height, "hash", blockInfo.Hash, "time", blockInfo.Time)
-	return blockInfo, nil
 }
