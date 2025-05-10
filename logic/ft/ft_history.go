@@ -212,15 +212,16 @@ func (l *FtLogic) processHistoryItem(ctx context.Context, item interface{}, cont
 	log.DebugWithContextf(ctx, "交易时间信息: timeStamp=%d, utcTime=%s", timeStamp, utcTime)
 
 	// 获取交易详情
-	decodeTx, err := rpcblockchain.GetRawTransaction(ctx, txHash, true)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取交易详情失败: txHash=%s, 错误=%v", txHash, err)
-		return nil, fmt.Errorf("获取交易详情失败: %v", err)
+	decodeTxChan := rpcblockchain.GetRawTransaction(ctx, txHash, true)
+	decodeResult := <-decodeTxChan
+	if decodeResult.Error != nil {
+		log.WarnWithContextf(ctx, "获取交易[%s]详情失败: %v", txHash, decodeResult.Error)
+		return nil, fmt.Errorf("获取交易详情失败: %v", decodeResult.Error)
 	}
 
-	decodeTxMap, ok := decodeTx.(map[string]interface{})
+	decodeTxMap, ok := decodeResult.Result.(map[string]interface{})
 	if !ok {
-		log.ErrorWithContextf(ctx, "交易详情格式不正确: %v", decodeTx)
+		log.WarnWithContextf(ctx, "交易[%s]详情格式不正确", txHash)
 		return nil, fmt.Errorf("交易详情格式不正确")
 	}
 
@@ -262,9 +263,16 @@ func (l *FtLogic) getTxTimeInfo(ctx context.Context, height float64) (int64, str
 	}
 
 	// 已确认的交易，获取区块信息
-	blockInfo, err := rpcblockchain.GetBlockByHeight(ctx, int64(height))
-	if err != nil {
-		log.WarnWithContextf(ctx, "获取区块信息失败: %v", err)
+	blockInfoChan := rpcblockchain.GetBlockByHeight(ctx, int64(height))
+	result := <-blockInfoChan
+	if result.Error != nil {
+		log.WarnWithContextf(ctx, "获取区块信息失败: %v", result.Error)
+		return 0, ""
+	}
+
+	blockInfo, ok := result.Result.(map[string]interface{})
+	if !ok {
+		log.WarnWithContextf(ctx, "区块信息格式不正确")
 		return 0, ""
 	}
 
@@ -359,19 +367,21 @@ func (l *FtLogic) processTxInputs(ctx context.Context, decodeTxMap map[string]in
 			vinIndex, vinTxid, int(vinVout))
 
 		// 获取输入交易详情
-		vinDecodeTx, err := rpcblockchain.GetRawTransaction(ctx, vinTxid, true)
-		if err != nil {
-			log.WarnWithContextf(ctx, "获取输入交易详情失败: %v", err)
+		vinDecodeTxChan := rpcblockchain.GetRawTransaction(ctx, vinTxid, true)
+		vinResult := <-vinDecodeTxChan
+		if vinResult.Error != nil {
+			log.WarnWithContextf(ctx, "获取输入交易详情失败: %v", vinResult.Error)
 			continue
 		}
 
-		vinDecodeTxMap, ok := vinDecodeTx.(map[string]interface{})
+		vinDecodeTx, ok := vinResult.Result.(map[string]interface{})
 		if !ok {
+			log.WarnWithContextf(ctx, "输入交易详情格式不正确")
 			continue
 		}
 
 		// 处理输入的值和FT信息
-		l.processInputValue(ctx, vinDecodeTxMap, int(vinVout), vinTxid, vinMap, txInfo,
+		l.processInputValue(ctx, vinDecodeTx, int(vinVout), vinTxid, vinMap, txInfo,
 			contractId, combineScript, vinIndex)
 	}
 

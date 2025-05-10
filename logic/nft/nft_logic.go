@@ -7,12 +7,13 @@ import (
 	"strconv"
 	"time"
 
+	entityblockchain "ginproject/entity/blockchain"
 	"ginproject/entity/nft"
 	"ginproject/entity/utility"
 	"ginproject/middleware/log"
-	"ginproject/repo/db/nft_collections_dao"
-	"ginproject/repo/db/nft_utxo_set_dao"
-	"ginproject/repo/rpc/blockchain"
+	nft_collections_dao "ginproject/repo/db/nft_collections_dao"
+	nft_utxo_set_dao "ginproject/repo/db/nft_utxo_set_dao"
+	rpcblockchain "ginproject/repo/rpc/blockchain"
 	"ginproject/repo/rpc/electrumx"
 )
 
@@ -506,11 +507,18 @@ func (logic *NFTLogic) GetNftHistoryByAddress(ctx context.Context, address strin
 			utcTime = "未确认"
 		} else {
 			// 获取区块信息
-			blockInfo, err := blockchain.GetBlockByHeight(ctx, int64(item.Height))
-			if err != nil {
-				log.WarnWithContextf(ctx, "获取区块[%d]信息失败: %v", item.Height, err)
+			blockInfoChan := rpcblockchain.GetBlockByHeight(ctx, int64(item.Height))
+			result := <-blockInfoChan
+			if result.Error != nil {
+				log.WarnWithContextf(ctx, "获取区块[%d]信息失败: %v", item.Height, result.Error)
 				// 继续处理，不中断整体流程
 			} else {
+				blockInfo, ok := result.Result.(map[string]interface{})
+				if !ok {
+					log.WarnWithContextf(ctx, "区块信息格式不正确: %v", result.Result)
+					continue
+				}
+
 				// 设置时间戳和UTC时间
 				timeValue, ok := blockInfo["time"].(float64)
 				if ok {
@@ -526,10 +534,18 @@ func (logic *NFTLogic) GetNftHistoryByAddress(ctx context.Context, address strin
 		}
 
 		// 获取原始交易，解析发送者和接收者地址
-		txInfo, err := blockchain.DecodeTx(ctx, txid)
-		if err != nil {
-			log.WarnWithContextf(ctx, "获取交易[%s]详情失败: %v", txid, err)
+		asyncResultChan := rpcblockchain.DecodeTx(ctx, txid)
+		asyncResult := <-asyncResultChan
+		if asyncResult.Error != nil {
+			log.WarnWithContextf(ctx, "获取交易[%s]详情失败: %v", txid, asyncResult.Error)
 			// 继续处理，不中断整体流程
+			continue
+		}
+
+		// 类型断言获取交易详情
+		txInfo, ok := asyncResult.Result.(*entityblockchain.TransactionResponse)
+		if !ok {
+			log.WarnWithContextf(ctx, "交易[%s]详情类型转换失败", txid)
 			continue
 		}
 

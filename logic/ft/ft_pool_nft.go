@@ -191,10 +191,18 @@ func (l *FtLogic) DecodeTxHash(ctx context.Context, txid string) (*blockchain.Tr
 	log.InfoWithContextf(ctx, "开始解码交易: %s", txid)
 
 	// 调用repo层的RPC方法解码交易
-	txInfo, err := rpcblockchain.DecodeTxHash(ctx, txid)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "解码交易失败: %v", err)
-		return nil, fmt.Errorf("解码交易失败: %w", err)
+	resultChan := rpcblockchain.DecodeTxHash(ctx, txid)
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContextf(ctx, "解码交易失败: %v", result.Error)
+		return nil, fmt.Errorf("解码交易失败: %w", result.Error)
+	}
+
+	// 类型断言转换为TransactionResponse
+	txInfo, ok := result.Result.(*blockchain.TransactionResponse)
+	if !ok {
+		log.ErrorWithContextf(ctx, "解码交易结果类型转换失败")
+		return nil, fmt.Errorf("解码交易结果类型转换失败")
 	}
 
 	log.InfoWithContextf(ctx, "解码交易成功: %s", txid)

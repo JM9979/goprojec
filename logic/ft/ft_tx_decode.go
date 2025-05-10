@@ -22,10 +22,11 @@ func (l *FtLogic) DecodeFtTransactionHistory(ctx context.Context, req *ft.FtTxDe
 	log.InfoWithContextf(ctx, "开始解析FT交易: 交易ID=%s", req.Txid)
 
 	// 调用RPC解析交易
-	decode_tx, err := rpcblockchain.GetRawTransaction(ctx, req.Txid, true)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "解析交易失败: %v", err)
-		return nil, fmt.Errorf("解析交易失败: %v", err)
+	decodeTxChan := rpcblockchain.GetRawTransaction(ctx, req.Txid, true)
+	result := <-decodeTxChan
+	if result.Error != nil {
+		log.ErrorWithContextf(ctx, "解析交易失败: %v", result.Error)
+		return nil, fmt.Errorf("解析交易失败: %v", result.Error)
 	}
 
 	// 准备返回数据
@@ -33,7 +34,7 @@ func (l *FtLogic) DecodeFtTransactionHistory(ctx context.Context, req *ft.FtTxDe
 	output_list := []ft.FtTxDecodeData{}
 
 	// 提取交易输入信息
-	decodeTxMap, ok := decode_tx.(map[string]interface{})
+	decodeTxMap, ok := result.Result.(map[string]interface{})
 	if !ok {
 		log.ErrorWithContextf(ctx, "交易数据格式错误")
 		return nil, fmt.Errorf("交易数据格式错误")

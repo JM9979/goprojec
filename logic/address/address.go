@@ -211,11 +211,19 @@ func (l *AddressLogic) processTransactionItem(ctx context.Context, address strin
 
 	// 获取交易详情
 	log.InfoWithContext(ctx, "开始获取交易详情", "txid:", txid)
-	decodedInfo, err := rpcbchain.DecodeTx(ctx, txid)
-	if err != nil {
+	ResultChan := rpcbchain.DecodeTx(ctx, txid)
+	result := <-ResultChan
+	if result.Error != nil {
 		log.WarnWithContext(ctx, "获取交易详情失败，跳过此记录",
 			"txid:", txid,
-			"错误:", err)
+			"错误:", result.Error)
+		return electrumx.HistoryItem{}, false
+	}
+
+	// 类型断言获取交易详情
+	decodedInfo, ok := result.Result.(*blockchain.TransactionResponse)
+	if !ok {
+		log.WarnWithContext(ctx, "交易详情类型转换失败，跳过此记录", "txid:", txid)
 		return electrumx.HistoryItem{}, false
 	}
 
@@ -328,11 +336,19 @@ func (l *AddressLogic) processTransactionInputs(
 			vinVout := vin.Vout
 
 			// 获取前一个交易的输出信息
-			vinDecoded, err := rpcbchain.DecodeTx(ctx, vinTxid)
-			if err != nil {
+			ResultChan := rpcbchain.DecodeTx(ctx, vinTxid)
+			result := <-ResultChan
+			if result.Error != nil {
 				log.WarnWithContext(ctx, "获取输入交易详情失败",
 					"vin_txid:", vinTxid,
-					"错误:", err)
+					"错误:", result.Error)
+				continue
+			}
+
+			// 类型断言获取交易详情
+			vinDecoded, ok := result.Result.(*blockchain.TransactionResponse)
+			if !ok {
+				log.WarnWithContext(ctx, "输入交易详情类型转换失败", "vin_txid:", vinTxid)
 				continue
 			}
 
@@ -429,21 +445,28 @@ func (l *AddressLogic) getTransactionTimestamp(ctx context.Context, item electru
 		timeStamp = 0
 	} else {
 		// 使用getblockbyheight获取区块信息，与Python版本保持一致
-		blockInfo, err := rpcbchain.GetBlockByHeight(ctx, int64(item.Height))
-		if err != nil {
+		blockInfoChan := rpcbchain.GetBlockByHeight(ctx, int64(item.Height))
+		result := <-blockInfoChan
+		if result.Error != nil {
 			log.ErrorWithContext(ctx, "获取区块信息失败",
 				"height:", item.Height,
-				"错误:", err)
+				"错误:", result.Error)
 			timeStamp = 0
 		} else {
-			timeValue, ok := blockInfo["time"].(float64)
+			blockInfo, ok := result.Result.(map[string]interface{})
 			if !ok {
-				log.ErrorWithContext(ctx, "区块时间戳类型转换失败", "blockInfo", blockInfo)
+				log.ErrorWithContext(ctx, "区块信息格式不正确", "result", result.Result)
 				timeStamp = 0
 			} else {
-				timeStamp = int64(timeValue)
+				timeValue, ok := blockInfo["time"].(float64)
+				if !ok {
+					log.ErrorWithContext(ctx, "区块时间戳类型转换失败", "blockInfo", blockInfo)
+					timeStamp = 0
+				} else {
+					timeStamp = int64(timeValue)
+				}
+				utcTime = time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
 			}
-			utcTime = time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
 		}
 	}
 
