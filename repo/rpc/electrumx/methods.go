@@ -16,6 +16,7 @@ import (
 var (
 	defaultClient *ElectrumXClient
 	initialized   = false
+	poolEnabled   = true // 默认启用连接池
 )
 
 // GetDefaultClient 获取默认的ElectrumX客户端实例
@@ -31,9 +32,49 @@ func GetDefaultClient() (*ElectrumXClient, error) {
 		}
 		defaultClient = client
 		initialized = true
+
+		// 默认启用连接池
+		if poolEnabled {
+			if err := defaultClient.EnablePool(); err != nil {
+				log.Error("启用ElectrumX连接池失败:", err)
+			} else {
+				log.Info("ElectrumX连接池已启用")
+			}
+		}
 	}
 
 	return defaultClient, nil
+}
+
+// EnablePool 启用ElectrumX连接池
+func EnablePool() error {
+	if !initialized {
+		// 如果客户端尚未初始化，设置标志位，客户端初始化时会启用连接池
+		poolEnabled = true
+		return nil
+	}
+
+	// 客户端已初始化，直接启用连接池
+	return defaultClient.EnablePool()
+}
+
+// DisablePool 禁用ElectrumX连接池
+func DisablePool() error {
+	if !initialized {
+		poolEnabled = false
+		return nil
+	}
+
+	return defaultClient.DisablePool()
+}
+
+// GetClientPoolStats 获取连接池统计信息
+func GetClientPoolStats() (idleConns, openConns int, err error) {
+	if !initialized {
+		return 0, 0, fmt.Errorf("ElectrumX客户端尚未初始化")
+	}
+
+	return defaultClient.PoolStats()
 }
 
 // CallMethod 调用ElectrumX RPC方法的简便函数
@@ -46,7 +87,7 @@ func CallMethod(ctx context.Context, method string, params []interface{}) (json.
 	// 记录开始调用日志
 	log.InfoWithContext(ctx, "开始调用ElectrumX方法:", method)
 
-	result, err := client.CallRPC(method, params)
+	result, err := client.CallRPCWithContext(ctx, method, params)
 	if err != nil {
 		log.ErrorWithContext(ctx, "调用ElectrumX方法失败:", method, "错误:", err)
 		return nil, err
