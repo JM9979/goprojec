@@ -18,6 +18,12 @@ import (
 	rpcex "ginproject/repo/rpc/electrumx"
 )
 
+// AsyncUtxoResult 异步UTXO结果
+type AsyncUtxoResult struct {
+	Utxos electrumx.UtxoResponse
+	Error error
+}
+
 // AddressLogic 地址业务逻辑
 type AddressLogic struct{}
 
@@ -26,41 +32,60 @@ func NewAddressLogic() *AddressLogic {
 	return &AddressLogic{}
 }
 
-// GetAddressUnspentUtxos 获取地址的未花费交易输出
-func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address string) (electrumx.UtxoResponse, error) {
-	// 记录开始处理的日志
-	log.InfoWithContext(ctx, "开始获取地址的UTXO", "address:", address)
+// GetAddressUnspentUtxos 获取地址的未花费交易输出（异步版本）
+func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address string) chan *AsyncUtxoResult {
+	resultChan := make(chan *AsyncUtxoResult, 1)
 
-	// 验证地址合法性
-	valid, addrType, err := utility.ValidateWIFAddress(address)
-	if err != nil || !valid {
-		log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
-		return nil, fmt.Errorf("无效的地址格式: %w", err)
-	}
+	go func() {
+		defer close(resultChan)
 
-	log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
+		// 记录开始处理的日志
+		log.InfoWithContext(ctx, "开始获取地址的UTXO", "address:", address)
 
-	// 将地址转换为脚本哈希
-	scriptHash, err := utility.AddressToScriptHash(address)
-	if err != nil {
-		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
-		return nil, fmt.Errorf("地址转换失败: %w", err)
-	}
+		// 验证地址合法性
+		valid, addrType, err := utility.ValidateWIFAddress(address)
+		if err != nil || !valid {
+			log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
+			resultChan <- &AsyncUtxoResult{
+				Error: fmt.Errorf("无效的地址格式: %w", err),
+			}
+			return
+		}
 
-	log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
+		log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
 
-	// 调用RPC获取UTXO列表
-	utxos, err := rpcex.GetListUnspent(ctx, scriptHash)
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取UTXO失败",
-			"address:", address,
-			"scriptHash:", scriptHash,
-			"错误:", err)
-		return nil, fmt.Errorf("获取UTXO失败: %w", err)
-	}
+		// 将地址转换为脚本哈希
+		scriptHash, err := utility.AddressToScriptHash(address)
+		if err != nil {
+			log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
+			resultChan <- &AsyncUtxoResult{
+				Error: fmt.Errorf("地址转换失败: %w", err),
+			}
+			return
+		}
 
-	log.InfoWithContext(ctx, "成功获取地址UTXO", "address:", address, "count:", len(utxos))
-	return utxos, nil
+		log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
+
+		// 调用RPC获取UTXO列表
+		utxos, err := rpcex.GetListUnspent(ctx, scriptHash)
+		if err != nil {
+			log.ErrorWithContext(ctx, "获取UTXO失败",
+				"address:", address,
+				"scriptHash:", scriptHash,
+				"错误:", err)
+			resultChan <- &AsyncUtxoResult{
+				Error: fmt.Errorf("获取UTXO失败: %w", err),
+			}
+			return
+		}
+
+		log.InfoWithContext(ctx, "成功获取地址UTXO", "address:", address, "count:", len(utxos))
+		resultChan <- &AsyncUtxoResult{
+			Utxos: utxos,
+		}
+	}()
+
+	return resultChan
 }
 
 // GetAddressHistoryPage 获取地址历史交易信息（支持分页）

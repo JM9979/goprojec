@@ -42,18 +42,21 @@ func (s *AddressService) GetAddressUnspentUtxos(c *gin.Context) {
 	}
 
 	// 调用业务逻辑层
-	utxos, err := s.addressLogic.GetAddressUnspentUtxos(ctx, address)
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址UTXO失败", err)
+	resultChan := s.addressLogic.GetAddressUnspentUtxos(ctx, address)
+	result := <-resultChan
+
+	// 检查是否有错误
+	if result.Error != nil {
+		log.ErrorWithContext(ctx, "获取地址UTXO失败", result.Error)
 		c.JSON(http.StatusOK, gin.H{
 			"code":    http.StatusInternalServerError,
-			"message": "获取地址UTXO失败: " + err.Error(),
+			"message": "获取地址UTXO失败: " + result.Error.Error(),
 		})
 		return
 	}
 
 	// 返回成功响应
-	c.JSON(http.StatusOK, utxos)
+	c.JSON(http.StatusOK, result.Utxos)
 }
 
 // GetAddressHistory 获取地址历史交易信息
