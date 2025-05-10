@@ -34,7 +34,7 @@ func (s *AddressService) GetAddressUnspentUtxos(c *gin.Context) {
 
 	// 参数验证
 	if address == "" {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
 			"message": "地址参数不能为空",
 		})
@@ -48,7 +48,7 @@ func (s *AddressService) GetAddressUnspentUtxos(c *gin.Context) {
 	// 检查是否有错误
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取地址UTXO失败", result.Error)
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "获取地址UTXO失败: " + result.Error.Error(),
 		})
