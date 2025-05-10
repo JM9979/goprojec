@@ -15,6 +15,8 @@ import (
 
 	"ginproject/entity/config"
 	"ginproject/middleware/log"
+
+	"github.com/silenceper/pool"
 )
 
 // RPCRequest 表示RPC请求
@@ -47,10 +49,10 @@ type AsyncResult struct {
 
 // ElectrumXClient ElectrumX客户端
 type ElectrumXClient struct {
-	conn      net.Conn
-	requestID int32
 	mu        sync.Mutex
+	requestID int32
 	config    *config.ElectrumXConfig
+	pool      pool.Pool
 	connected bool
 }
 
@@ -69,47 +71,134 @@ func NewClient() (*ElectrumXClient, error) {
 	return client, nil
 }
 
+// createConnectionPool 创建ElectrumX连接池
+func (c *ElectrumXClient) createConnectionPool() error {
+	if c.pool != nil {
+		return nil
+	}
+
+	address := net.JoinHostPort(c.config.Host, fmt.Sprintf("%d", c.config.Port))
+	log.Info("正在创建ElectrumX连接池, 服务器地址:", address)
+
+	// 连接创建工厂
+	factory := func() (interface{}, error) {
+		// 设置连接超时
+		dialer := &net.Dialer{
+			Timeout: time.Duration(c.config.Timeout) * time.Second,
+		}
+
+		var conn net.Conn
+		var err error
+
+		// 根据是否使用TLS创建连接
+		if c.config.UseTLS {
+			tlsConfig := &tls.Config{
+				InsecureSkipVerify: true, // 注意：生产环境中应该验证证书
+			}
+			conn, err = tls.DialWithDialer(dialer, c.config.Protocol, address, tlsConfig)
+		} else {
+			conn, err = dialer.Dial(c.config.Protocol, address)
+		}
+
+		if err != nil {
+			log.Error("创建ElectrumX连接失败:", err)
+			return nil, fmt.Errorf("创建连接失败: %w", err)
+		}
+
+		log.Debug("创建了新的ElectrumX连接")
+		return conn, nil
+	}
+
+	// 关闭连接的方法
+	close := func(v interface{}) error {
+		if conn, ok := v.(net.Conn); ok {
+			err := conn.Close()
+			if err != nil {
+				log.Error("关闭ElectrumX连接时出错:", err)
+				return err
+			}
+			log.Debug("关闭了一个ElectrumX连接")
+		}
+		return nil
+	}
+
+	// 检查连接是否有效的方法
+	ping := func(v interface{}) error {
+		if conn, ok := v.(net.Conn); ok {
+			// 设置读写超时
+			deadline := time.Now().Add(time.Duration(c.config.Timeout) * time.Second)
+			if err := conn.SetDeadline(deadline); err != nil {
+				return err
+			}
+
+			// 构建ping请求
+			pingReq := RPCRequest{
+				JSONRPC: "2.0",
+				ID:      int(atomic.AddInt32(&c.requestID, 1)),
+				Method:  "server.ping",
+				Params:  []interface{}{},
+			}
+
+			pingBytes, err := json.Marshal(pingReq)
+			if err != nil {
+				return err
+			}
+			pingBytes = append(pingBytes, '\n')
+
+			// 发送ping请求
+			_, err = conn.Write(pingBytes)
+			if err != nil {
+				return err
+			}
+
+			// 读取响应 (simple version)
+			reader := bufio.NewReader(conn)
+			_, err = reader.ReadBytes('\n')
+
+			// 重置超时
+			conn.SetDeadline(time.Time{})
+
+			return err
+		}
+		return fmt.Errorf("无效的连接类型")
+	}
+
+	// 连接池配置
+	poolConfig := &pool.Config{
+		InitialCap:  c.config.MaxIdleConns, // 初始连接数
+		MaxIdle:     c.config.MaxIdleConns, // 最大空闲连接数
+		MaxCap:      c.config.MaxOpenConns, // 最大连接数
+		Factory:     factory,          // 连接工厂
+		Close:       close,            // 关闭连接的方法
+		Ping:        ping,             // 检查连接的方法
+		IdleTimeout: 60 * time.Second, // 连接最大空闲时间
+	}
+
+	// 创建连接池
+	p, err := pool.NewChannelPool(poolConfig)
+	if err != nil {
+		log.Error("创建ElectrumX连接池失败:", err)
+		return fmt.Errorf("创建连接池失败: %w", err)
+	}
+
+	c.pool = p
+	c.connected = true
+	log.Info("ElectrumX连接池创建成功, 初始连接数:", poolConfig.InitialCap, "最大连接数:", poolConfig.MaxCap)
+
+	return nil
+}
+
 // Connect 连接到ElectrumX服务器
 func (c *ElectrumXClient) Connect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.connected && c.conn != nil {
+	if c.connected && c.pool != nil {
 		return nil
 	}
 
-	// 构建地址
-	address := net.JoinHostPort(c.config.Host, fmt.Sprintf("%d", c.config.Port))
-	log.Info("正在连接ElectrumX服务器:", address)
-
-	// 设置连接超时
-	dialer := &net.Dialer{
-		Timeout: time.Duration(c.config.Timeout) * time.Second,
-	}
-
-	var conn net.Conn
-	var err error
-
-	// 根据是否使用TLS创建连接
-	if c.config.UseTLS {
-		tlsConfig := &tls.Config{
-			InsecureSkipVerify: true, // 注意：生产环境中应该验证证书
-		}
-		conn, err = tls.DialWithDialer(dialer, c.config.Protocol, address, tlsConfig)
-	} else {
-		conn, err = dialer.Dial(c.config.Protocol, address)
-	}
-
-	if err != nil {
-		log.Error("连接ElectrumX服务器失败:", err)
-		return fmt.Errorf("连接失败: %w", err)
-	}
-
-	c.conn = conn
-	c.connected = true
-	log.Info("已成功连接到ElectrumX服务器")
-
-	return nil
+	// 创建连接池
+	return c.createConnectionPool()
 }
 
 // Disconnect 断开与ElectrumX服务器的连接
@@ -117,15 +206,12 @@ func (c *ElectrumXClient) Disconnect() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.conn != nil {
-		err := c.conn.Close()
-		c.conn = nil
+	if c.pool != nil {
+		log.Info("正在关闭ElectrumX连接池")
+		c.pool.Release()
+		c.pool = nil
 		c.connected = false
-		if err != nil {
-			log.Error("关闭ElectrumX连接时出错:", err)
-			return fmt.Errorf("关闭连接失败: %w", err)
-		}
-		log.Info("已断开与ElectrumX服务器的连接")
+		log.Info("已关闭ElectrumX连接池")
 	}
 
 	return nil
@@ -133,13 +219,10 @@ func (c *ElectrumXClient) Disconnect() error {
 
 // CallRPC 调用ElectrumX RPC方法
 func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMessage, error) {
-	// 确保连接
+	// 确保连接池已创建
 	if err := c.Connect(); err != nil {
 		return nil, err
 	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
 
 	// 获取请求ID
 	id := int(atomic.AddInt32(&c.requestID, 1))
@@ -162,23 +245,47 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 	// 记录日志
 	log.Debug("发送ElectrumX RPC请求:", "method:", method, "params:", params)
 
+	// 从连接池获取连接
+	connObj, err := c.pool.Get()
+	if err != nil {
+		log.Error("从连接池获取连接失败:", err)
+		return nil, fmt.Errorf("获取连接失败: %w", err)
+	}
+
+	// 使用完毕后将连接放回池中或关闭
+	putConn := true
+	defer func() {
+		if connObj != nil && putConn {
+			c.pool.Put(connObj)
+		}
+	}()
+
+	// 类型断言获取net.Conn
+	conn, ok := connObj.(net.Conn)
+	if !ok {
+		return nil, fmt.Errorf("无效的连接类型")
+	}
+
 	// 设置读写超时
 	deadline := time.Now().Add(time.Duration(c.config.Timeout) * time.Second)
-	if err := c.conn.SetDeadline(deadline); err != nil {
+	if err := conn.SetDeadline(deadline); err != nil {
 		log.Warn("设置连接超时失败:", err)
 	}
 
 	// 发送请求
-	_, err = c.conn.Write(reqBytes)
+	_, err = conn.Write(reqBytes)
 	if err != nil {
 		log.Error("发送RPC请求失败:", err)
-		// 尝试重新连接
-		c.Disconnect()
+		// 连接可能已经失效，不放回池中，而是关闭
+		if connObj != nil {
+			putConn = false
+			c.pool.Close(connObj)
+		}
 		return nil, fmt.Errorf("发送RPC请求失败: %w", err)
 	}
 
 	// 使用bufio.Reader读取完整响应
-	reader := bufio.NewReader(c.conn)
+	reader := bufio.NewReader(conn)
 
 	// 使用bytes.Buffer收集响应数据
 	var responseBuffer bytes.Buffer
@@ -190,8 +297,12 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 	for {
 		// 检查是否超出大小限制
 		if responseBuffer.Len() > maxResponseSize {
-			c.Disconnect()
 			log.Error("RPC响应超过大小限制(", maxResponseSize/1024/1024, "MB)")
+			// 连接可能已经失效，不放回池中，而是关闭
+			if connObj != nil {
+				putConn = false
+				c.pool.Close(connObj)
+			}
 			return nil, fmt.Errorf("RPC响应数据过大，超过%dMB限制", maxResponseSize/1024/1024)
 		}
 
@@ -199,7 +310,11 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 		line, err := reader.ReadBytes('\n')
 		if err != nil && err != io.EOF {
 			log.Error("读取RPC响应失败:", err)
-			c.Disconnect()
+			// 连接可能已经失效，不放回池中，而是关闭
+			if connObj != nil {
+				putConn = false
+				c.pool.Close(connObj)
+			}
 			return nil, fmt.Errorf("读取RPC响应失败: %w", err)
 		}
 
@@ -215,6 +330,9 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 		if jsonErr := json.Unmarshal(responseData, &resp); jsonErr == nil {
 			// 检查ID是否匹配
 			if resp.ID == id {
+				// 重置超时
+				conn.SetDeadline(time.Time{})
+
 				// 检查错误
 				if resp.Error != nil {
 					log.Warn("RPC调用错误:", resp.Error.Message, "(代码:", resp.Error.Code, ")")
@@ -235,7 +353,11 @@ func (c *ElectrumXClient) CallRPC(method string, params interface{}) (json.RawMe
 			}
 
 			log.Error("连接关闭但未收到完整响应:", respData)
-			c.Disconnect()
+			// 连接可能已经失效，不放回池中，而是关闭
+			if connObj != nil {
+				putConn = false
+				c.pool.Close(connObj)
+			}
 			return nil, fmt.Errorf("连接关闭但未收到完整响应")
 		}
 	}

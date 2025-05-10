@@ -32,3 +32,5 @@ electrumx:
   retry_count: 3 # 重试次数 
   use_tls: false
   protocol: "tcp"
+  max_idle_conns: 10
+  max_open_conns: 100
