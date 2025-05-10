@@ -56,14 +56,14 @@ type TBCNodeConfig struct {
 
 // ElectrumXConfig ElectrumX RPC客户端配置
 type ElectrumXConfig struct {
-	Host        string `yaml:"host"`
-	Port        int    `yaml:"port"`
-	Timeout     int    `yaml:"timeout"`
-	RetryCount  int    `yaml:"retry_count"`
-	UseTLS      bool   `yaml:"use_tls"`
-	Protocol    string `yaml:"protocol"`
-	MaxIdleConns int    `yaml:"max_idle_conns"`
-	MaxOpenConns int    `yaml:"max_open_conns"`
+	Host         string `yaml:"host"`
+	Port         int    `yaml:"port"`
+	Timeout      int    `yaml:"timeout"`
+	RetryCount   int    `yaml:"retry_count"`
+	UseTLS       bool   `yaml:"use_tls"`
+	Protocol     string `yaml:"protocol"`
+	MaxIdleConns int    `yaml:"maxidleconns"`
+	MaxOpenConns int    `yaml:"maxopenconns"`
 }
 
 // GetConfig 获取配置

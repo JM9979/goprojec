@@ -24,7 +24,7 @@ func Global_init() error {
 	// 启用配置文件监视
 	err := conf.GetManager().EnableWatch(func() {
 		// 配置更改时的回调函数
-		log.Info("检测到配置文件变更，已重新加载")
+		log.Info("检测到配置文件变更，已重新加载", config.GetConfig())
 	})
 	if err != nil {
 		return fmt.Errorf("启用配置监视失败: %w", err)

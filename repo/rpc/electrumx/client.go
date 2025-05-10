@@ -171,7 +171,7 @@ func (c *ElectrumXClient) createConnectionPool() error {
 		Factory:     factory,          // 连接工厂
 		Close:       close,            // 关闭连接的方法
 		Ping:        ping,             // 检查连接的方法
-		IdleTimeout: 60 * time.Second, // 连接最大空闲时间
+		IdleTimeout: time.Duration(c.config.Timeout) * time.Second, // 连接最大空闲时间
 	}
 
 	// 创建连接池
