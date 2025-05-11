@@ -33,7 +33,7 @@ type TBC20FTUtxoItem struct {
 // TBC20FTUtxoResponse 获取指定合并脚本和合约的FT UTXO响应
 type TBC20FTUtxoResponse struct {
 	// FT UTXO列表
-	Data []*TBC20FTUtxoItem `json:"data"`
+	FtUtxoList []*TBC20FTUtxoItem `json:"ftUtxoList"`
 }
 
 // Validate 验证FtUtxoCombineScriptRequest的参数

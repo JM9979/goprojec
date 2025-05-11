@@ -17,6 +17,7 @@ import (
 	multisig_service "ginproject/service/multisig_service"
 	nft_service "ginproject/service/nft_service"
 	script_service "ginproject/service/script_service"
+	tx_broadcast_service "ginproject/service/tx_broadcast_service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -148,4 +149,11 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/nft/collection/info/:collection_id", nftService.GetDetailCollectionInfo)
 	// 8. 根据合约ID获取NFT信息
 	apiGroup.POST("/nft/infos/contract_ids", nftService.GetNftsByContractIds)
+
+	// 注册交易广播服务API
+	txBroadcastService := tx_broadcast_service.NewTxBroadcastService()
+	// 广播单笔原始交易
+	apiGroup.POST("/broadcast/tx/raw", txBroadcastService.BroadcastTxRaw)
+	// 批量广播原始交易
+	apiGroup.POST("/broadcast/txs/raw", txBroadcastService.BroadcastTxsRaw)
 }

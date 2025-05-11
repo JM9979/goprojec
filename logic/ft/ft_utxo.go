@@ -86,8 +86,8 @@ func (l *FtLogic) GetFtUtxosByCombineScript(ctx context.Context, req *ft.FtUtxoC
 
 	
 	dbResponse, err := l.getFtUtxoFromDB(ctx, combineScript, req.ContractId)
-	if err == nil && len(dbResponse.Data) > 0 {
-		log.InfoWithContextf(ctx, "从数据库成功获取FT UTXO: 共%d条记录", len(dbResponse.Data))
+	if err == nil && len(dbResponse.FtUtxoList) > 0 {
+		log.InfoWithContextf(ctx, "从数据库成功获取FT UTXO: 共%d条记录", len(dbResponse.FtUtxoList))
 		return dbResponse, nil
 	}
 
@@ -135,7 +135,7 @@ func (l *FtLogic) GetFtUtxosByCombineScript(ctx context.Context, req *ft.FtUtxoC
 
 	// 4. 构建响应
 	response := &ft.TBC20FTUtxoResponse{
-		Data: make([]*ft.TBC20FTUtxoItem, 0, len(unspentUtxos)),
+		FtUtxoList: make([]*ft.TBC20FTUtxoItem, 0, len(unspentUtxos)),
 	}
 
 	for _, utxo := range unspentUtxos {
@@ -204,10 +204,10 @@ func (l *FtLogic) GetFtUtxosByCombineScript(ctx context.Context, req *ft.FtUtxoC
 			FtBalance:    ftAmount,
 		}
 
-		response.Data = append(response.Data, utxoItem)
+		response.FtUtxoList = append(response.FtUtxoList, utxoItem)
 	}
 
-	log.InfoWithContextf(ctx, "通过RPC成功获取FT UTXO: 共%d条记录", len(response.Data))
+	log.InfoWithContextf(ctx, "通过RPC成功获取FT UTXO: 共%d条记录", len(response.FtUtxoList))
 	return response, nil
 }
 
@@ -231,7 +231,7 @@ func (l *FtLogic) getFtUtxoFromDB(ctx context.Context, combineScript string, con
 
 	// 构造响应
 	response := &ft.TBC20FTUtxoResponse{
-		Data: make([]*ft.TBC20FTUtxoItem, 0, len(utxos)),
+		FtUtxoList: make([]*ft.TBC20FTUtxoItem, 0, len(utxos)),
 	}
 
 	// 将DAO返回的数据转换为API响应格式
@@ -250,9 +250,9 @@ func (l *FtLogic) getFtUtxoFromDB(ctx context.Context, combineScript string, con
 			FtDecimal:    int(ftDecimal),
 			FtBalance:    utxo.FtBalance,
 		}
-		response.Data = append(response.Data, utxoItem)
+		response.FtUtxoList = append(response.FtUtxoList, utxoItem)
 	}
 
-	log.InfoWithContextf(ctx, "从数据库获取FT UTXO成功: 共%d条记录", len(response.Data))
+	log.InfoWithContextf(ctx, "从数据库获取FT UTXO成功: 共%d条记录", len(response.FtUtxoList))
 	return response, nil
 }
