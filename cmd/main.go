@@ -17,6 +17,7 @@ import (
 	multisig_service "ginproject/service/multisig_service"
 	nft_service "ginproject/service/nft_service"
 	script_service "ginproject/service/script_service"
+	transaction_service "ginproject/service/transaction"
 	tx_broadcast_service "ginproject/service/tx_broadcast_service"
 
 	"github.com/gin-gonic/gin"
@@ -156,4 +157,17 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.POST("/broadcast/tx/raw", txBroadcastService.BroadcastTxRaw)
 	// 批量广播原始交易
 	apiGroup.POST("/broadcast/txs/raw", txBroadcastService.BroadcastTxsRaw)
+
+	// 注册交易服务API
+	txService := transaction_service.NewTransactionService()
+	// 广播单笔原始交易
+	apiGroup.POST("/tx/raw", txService.BroadcastTxRaw)
+	// 解码原始交易
+	apiGroup.POST("/tx/raw/decode", txService.DecodeTxRaw)
+	// 获取交易原始十六进制数据
+	apiGroup.GET("/tx/hex/:txid", txService.GetTxRawHex)
+	// 通过交易ID解码交易
+	apiGroup.GET("/tx/hex/:txid/decode", txService.DecodeTxByHash)
+	// 获取交易输入数据
+	apiGroup.POST("/tx/vins", txService.GetTxVins)
 }

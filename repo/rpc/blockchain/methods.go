@@ -12,13 +12,16 @@ import (
 
 // 节点RPC方法名常量
 const (
-	RpcMethodGetBlockByHeight  = "getblockbyheight"
-	RpcMethodGetBlock          = "getblock"
-	RpcMethodGetBlockHash      = "getblockhash"
-	RpcMethodGetBlockHeader    = "getblockheader"
-	RpcMethodGetInfo           = "getinfo"
-	RpcMethodGetBlockchainInfo = "getblockchaininfo"
-	RpcMethodGetRawMempool     = "getrawmempool"
+	RpcMethodGetBlockByHeight     = "getblockbyheight"
+	RpcMethodGetBlock             = "getblock"
+	RpcMethodGetBlockHash         = "getblockhash"
+	RpcMethodGetBlockHeader       = "getblockheader"
+	RpcMethodGetInfo              = "getinfo"
+	RpcMethodGetBlockchainInfo    = "getblockchaininfo"
+	RpcMethodGetRawMempool        = "getrawmempool"
+	RpcMethodGetRawTransaction    = "getrawtransaction"
+	RpcMethodDecodeRawTransaction = "decoderawtransaction"
+	RpcMethodSendRawTransaction   = "sendrawtransaction"
 )
 
 // BlockInfo 表示区块信息
@@ -445,26 +448,39 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 	return resultChan
 }
 
-// GetRawTransaction 获取交易原始信息（异步）
-// 直接返回RPC调用结果，不进行结构体转换
+// GetRawTransaction 获取交易原始数据
 func GetRawTransaction(ctx context.Context, txid string, verbose bool) <-chan AsyncResult {
 	resultChan := make(chan AsyncResult, 1)
 
 	go func() {
 		defer close(resultChan)
 
-		verboseInt := 0
-		if verbose {
-			verboseInt = 1
-		}
-
-		log.InfoWithContextf(ctx, "开始获取交易原始信息: txid=%s, verbose=%v", txid, verbose)
-		result, err := CallRPC("getrawtransaction", []interface{}{txid, verboseInt}, false)
-		if err != nil {
-			log.ErrorWithContextf(ctx, "获取交易原始信息失败: txid=%s, 错误=%v", txid, err)
+		// 参数验证
+		if txid == "" {
+			log.ErrorWithContext(ctx, "获取交易原始数据失败：交易ID不能为空")
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("获取交易失败: %w", err),
+				Error:  fmt.Errorf("交易ID不能为空"),
+			}
+			return
+		}
+
+		// 记录开始调用日志
+		log.InfoWithContext(ctx, "开始获取交易原始数据", "txid", txid, "verbose", verbose)
+
+		// 准备参数
+		params := []interface{}{txid}
+		if verbose {
+			params = append(params, 1)
+		}
+
+		// 调用区块链节点RPC
+		result, err := CallRPC(RpcMethodGetRawTransaction, params, false)
+		if err != nil {
+			log.ErrorWithContext(ctx, "获取交易原始数据失败", "txid", txid, "错误", err)
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  fmt.Errorf("获取交易原始数据失败: %w", err),
 			}
 			return
 		}
@@ -481,7 +497,7 @@ func GetRawTransaction(ctx context.Context, txid string, verbose bool) <-chan As
 			// 继续执行
 		}
 
-		log.InfoWithContextf(ctx, "成功获取交易原始信息: txid=%s", txid)
+		log.InfoWithContext(ctx, "成功获取交易原始数据", "txid", txid)
 		resultChan <- AsyncResult{
 			Result: result,
 			Error:  nil,
@@ -751,35 +767,33 @@ func DecodeTx(ctx context.Context, txid string) <-chan AsyncResult {
 	return resultChan
 }
 
-// DecodeRawTransaction 根据交易哈希获取原始交易详情（异步）
-// 此方法直接返回节点返回的原始结果，不进行结构体转换
-// 等同于Python中的decode_tx_hash函数
-func DecodeRawTransaction(ctx context.Context, txid string) <-chan AsyncResult {
+// DecodeRawTransaction 解码原始交易
+func DecodeRawTransaction(ctx context.Context, txHex string) <-chan AsyncResult {
 	resultChan := make(chan AsyncResult, 1)
 
 	go func() {
 		defer close(resultChan)
 
 		// 参数验证
-		if txid == "" {
-			log.ErrorWithContextf(ctx, "解析交易失败: 交易ID不能为空")
+		if txHex == "" {
+			log.ErrorWithContext(ctx, "解码原始交易失败：交易16进制字符串不能为空")
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("交易ID不能为空"),
+				Error:  fmt.Errorf("交易16进制字符串不能为空"),
 			}
 			return
 		}
 
 		// 记录开始调用日志
-		log.InfoWithContextf(ctx, "开始查询原始交易: %s", txid)
+		log.InfoWithContext(ctx, "开始解码原始交易", "txHexLength", len(txHex))
 
 		// 调用区块链节点RPC
-		result, err := CallRPC("getrawtransaction", []interface{}{txid, 1}, false)
+		result, err := CallRPC(RpcMethodDecodeRawTransaction, []interface{}{txHex}, false)
 		if err != nil {
-			log.ErrorWithContextf(ctx, "查询原始交易失败: %s, 错误: %v", txid, err)
+			log.ErrorWithContext(ctx, "解码原始交易失败", "错误", err)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("解析交易失败: %w", err),
+				Error:  fmt.Errorf("解码原始交易失败: %w", err),
 			}
 			return
 		}
@@ -796,7 +810,7 @@ func DecodeRawTransaction(ctx context.Context, txid string) <-chan AsyncResult {
 			// 继续执行
 		}
 
-		log.InfoWithContextf(ctx, "成功查询原始交易: %s", txid)
+		log.InfoWithContext(ctx, "成功解码原始交易")
 		resultChan <- AsyncResult{
 			Result: result,
 			Error:  nil,
@@ -864,6 +878,130 @@ func FetchMemPoolTxs(ctx context.Context) <-chan AsyncResult {
 		}
 
 		log.InfoWithContext(ctx, "获取内存池交易列表成功", "count", len(txidList))
+		resultChan <- AsyncResult{
+			Result: result,
+			Error:  nil,
+		}
+	}()
+
+	return resultChan
+}
+
+// GetTxVins 获取交易的输入数据
+func GetTxVins(ctx context.Context, txids []string) <-chan AsyncResult {
+	resultChan := make(chan AsyncResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		// 参数验证
+		if len(txids) == 0 {
+			log.ErrorWithContext(ctx, "获取交易输入数据失败：交易ID列表不能为空")
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  fmt.Errorf("交易ID列表不能为空"),
+			}
+			return
+		}
+
+		// 记录开始调用日志
+		log.InfoWithContext(ctx, "开始获取交易输入数据", "txids", txids)
+
+		// 存储处理结果
+		result := make([]interface{}, 0, len(txids))
+
+		for _, txid := range txids {
+			// 1. 获取交易详情
+			txResp, err := CallRPC(RpcMethodGetRawTransaction, []interface{}{txid, 1}, false)
+			if err != nil {
+				log.ErrorWithContext(ctx, "获取交易详情失败", "txid", txid, "错误", err)
+				continue
+			}
+
+			txMap, ok := txResp.(map[string]interface{})
+			if !ok {
+				log.ErrorWithContext(ctx, "交易详情格式错误", "txid", txid)
+				continue
+			}
+
+			// 获取交易的hash值
+			hash, ok := txMap["hash"].(string)
+			if !ok {
+				log.ErrorWithContext(ctx, "获取交易hash失败", "txid", txid)
+				continue
+			}
+
+			// 获取交易的输入列表
+			vins, ok := txMap["vin"].([]interface{})
+			if !ok {
+				log.ErrorWithContext(ctx, "获取交易输入列表失败", "txid", txid)
+				continue
+			}
+
+			vinDataList := []interface{}{}
+
+			// 2. 处理每个输入
+			for _, vinInterface := range vins {
+				vin, ok := vinInterface.(map[string]interface{})
+				if !ok {
+					log.ErrorWithContext(ctx, "交易输入格式错误", "txid", txid)
+					continue
+				}
+
+				// 检查是否为挖矿交易
+				if coinbase, exists := vin["coinbase"]; exists {
+					vinDataList = append(vinDataList, map[string]interface{}{
+						"coinbase": coinbase,
+					})
+					continue
+				}
+
+				// 获取输入交易的ID
+				vinTxid, ok := vin["txid"].(string)
+				if !ok {
+					log.ErrorWithContext(ctx, "获取输入交易ID失败", "txid", txid)
+					continue
+				}
+
+				// 获取输入交易的原始数据
+				vinRawResp, err := CallRPC(RpcMethodGetRawTransaction, []interface{}{vinTxid}, false)
+				if err != nil {
+					log.ErrorWithContext(ctx, "获取输入交易原始数据失败", "vinTxid", vinTxid, "错误", err)
+					continue
+				}
+
+				vinRaw, ok := vinRawResp.(string)
+				if !ok {
+					log.ErrorWithContext(ctx, "输入交易原始数据格式错误", "vinTxid", vinTxid)
+					continue
+				}
+
+				vinDataList = append(vinDataList, map[string]interface{}{
+					"vin_txid": vinTxid,
+					"vin_raw":  vinRaw,
+				})
+			}
+
+			// 3. 添加到结果
+			result = append(result, map[string]interface{}{
+				"txid":     hash,
+				"vin_data": vinDataList,
+			})
+		}
+
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  ctx.Err(),
+			}
+			return
+		default:
+			// 继续执行
+		}
+
+		log.InfoWithContext(ctx, "成功获取交易输入数据", "count", len(result))
 		resultChan <- AsyncResult{
 			Result: result,
 			Error:  nil,
