@@ -121,12 +121,11 @@ func FetchBlockByHeight(ctx context.Context, height int64) <-chan AsyncResult {
 	go func() {
 		defer close(resultChan)
 
-		traceId := ctx.Value("trace_id")
-		log.Info("[RPC请求] 通过高度获取区块", "trace_id", traceId, "height", height)
+		log.InfoWithContext(ctx, "通过高度获取区块", "height", height)
 
 		response, err := CallRPC(RpcMethodGetBlockByHeight, []interface{}{height}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 通过高度获取区块", "trace_id", traceId, "height", height, "error", err)
+			log.ErrorWithContext(ctx, "通过高度获取区块失败", "height", height, "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -137,7 +136,7 @@ func FetchBlockByHeight(ctx context.Context, height int64) <-chan AsyncResult {
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 通过高度获取区块", "trace_id", traceId, "height", height)
+			log.ErrorWithContext(ctx, "通过高度获取区块响应格式错误", "height", height)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -157,7 +156,7 @@ func FetchBlockByHeight(ctx context.Context, height int64) <-chan AsyncResult {
 			// 继续执行
 		}
 
-		log.Info("[RPC请求成功] 通过高度获取区块", "trace_id", traceId, "height", height)
+		log.InfoWithContext(ctx, "通过高度获取区块成功", "height", height)
 		resultChan <- AsyncResult{
 			Result: responseMap,
 			Error:  nil,
@@ -174,12 +173,11 @@ func FetchBlockByHash(ctx context.Context, hash string) <-chan AsyncResult {
 	go func() {
 		defer close(resultChan)
 
-		traceId := ctx.Value("trace_id")
-		log.Info("[RPC请求] 通过哈希获取区块", "trace_id", traceId, "hash", hash)
+		log.InfoWithContext(ctx, "通过哈希获取区块", "hash", hash)
 
 		response, err := CallRPC(RpcMethodGetBlock, []interface{}{hash}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 通过哈希获取区块", "trace_id", traceId, "hash", hash, "error", err)
+			log.ErrorWithContext(ctx, "通过哈希获取区块失败", "hash", hash, "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -190,7 +188,7 @@ func FetchBlockByHash(ctx context.Context, hash string) <-chan AsyncResult {
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 通过哈希获取区块", "trace_id", traceId, "hash", hash)
+			log.ErrorWithContext(ctx, "通过哈希获取区块响应格式错误", "hash", hash)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -210,7 +208,7 @@ func FetchBlockByHash(ctx context.Context, hash string) <-chan AsyncResult {
 			// 继续执行
 		}
 
-		log.Info("[RPC请求成功] 通过哈希获取区块", "trace_id", traceId, "hash", hash)
+		log.InfoWithContext(ctx, "通过哈希获取区块成功", "hash", hash)
 		resultChan <- AsyncResult{
 			Result: responseMap,
 			Error:  nil,
@@ -227,13 +225,12 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 	go func() {
 		defer close(resultChan)
 
-		traceId := ctx.Value("trace_id")
-		log.Info("[RPC请求] 通过高度获取区块头", "trace_id", traceId, "height", height)
+		log.InfoWithContext(ctx, "通过高度获取区块头", "height", height)
 
 		// 先获取区块哈希
 		hashResponse, err := CallRPC(RpcMethodGetBlockHash, []interface{}{height}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 获取区块哈希", "trace_id", traceId, "height", height, "error", err)
+			log.ErrorWithContext(ctx, "获取区块哈希失败", "height", height, "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -244,7 +241,7 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 		hash, ok := hashResponse.(string)
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 获取区块哈希", "trace_id", traceId, "height", height)
+			log.ErrorWithContext(ctx, "获取区块哈希响应格式错误", "height", height)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -255,7 +252,7 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 		// 通过哈希获取区块头
 		response, err := CallRPC(RpcMethodGetBlockHeader, []interface{}{hash}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 通过哈希获取区块头", "trace_id", traceId, "hash", hash, "error", err)
+			log.ErrorWithContext(ctx, "通过哈希获取区块头失败", "hash", hash, "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -266,7 +263,7 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 通过哈希获取区块头", "trace_id", traceId, "height", height)
+			log.ErrorWithContext(ctx, "通过哈希获取区块头响应格式错误", "height", height)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -286,7 +283,7 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 			// 继续执行
 		}
 
-		log.Info("[RPC请求成功] 通过高度获取区块头", "trace_id", traceId, "height", height)
+		log.InfoWithContext(ctx, "通过高度获取区块头成功", "height", height)
 		resultChan <- AsyncResult{
 			Result: responseMap,
 			Error:  nil,
@@ -303,12 +300,11 @@ func FetchBlockHeaderByHash(ctx context.Context, hash string) <-chan AsyncResult
 	go func() {
 		defer close(resultChan)
 
-		traceId := ctx.Value("trace_id")
-		log.Info("[RPC请求] 通过哈希获取区块头", "trace_id", traceId, "hash", hash)
+		log.InfoWithContext(ctx, "通过哈希获取区块头", "hash", hash)
 
 		response, err := CallRPC(RpcMethodGetBlockHeader, []interface{}{hash}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 通过哈希获取区块头", "trace_id", traceId, "hash", hash, "error", err)
+			log.ErrorWithContext(ctx, "通过哈希获取区块头失败", "hash", hash, "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -319,7 +315,7 @@ func FetchBlockHeaderByHash(ctx context.Context, hash string) <-chan AsyncResult
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 通过哈希获取区块头", "trace_id", traceId, "hash", hash)
+			log.ErrorWithContext(ctx, "通过哈希获取区块头响应格式错误", "hash", hash)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -339,7 +335,7 @@ func FetchBlockHeaderByHash(ctx context.Context, hash string) <-chan AsyncResult
 			// 继续执行
 		}
 
-		log.Info("[RPC请求成功] 通过哈希获取区块头", "trace_id", traceId, "hash", hash)
+		log.InfoWithContext(ctx, "通过哈希获取区块头成功", "hash", hash)
 		resultChan <- AsyncResult{
 			Result: responseMap,
 			Error:  nil,
@@ -356,13 +352,12 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 	go func() {
 		defer close(resultChan)
 
-		traceId := ctx.Value("trace_id")
-		log.Info("[RPC请求] 获取最近10个区块头", "trace_id", traceId)
+		log.InfoWithContext(ctx, "获取最近10个区块头")
 
 		// 获取当前区块高度
 		infoResponse, err := CallRPC(RpcMethodGetInfo, []interface{}{}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 获取区块链信息", "trace_id", traceId, "error", err)
+			log.ErrorWithContext(ctx, "获取区块链信息失败", "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -373,7 +368,7 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 		info, ok := infoResponse.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 获取区块链信息", "trace_id", traceId)
+			log.ErrorWithContext(ctx, "获取区块链信息响应格式错误")
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -384,7 +379,7 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 		height, ok := info["blocks"].(float64)
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 获取区块高度", "trace_id", traceId)
+			log.ErrorWithContext(ctx, "获取区块高度响应格式错误")
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -417,7 +412,7 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 			headerResult := <-headerChan
 
 			if headerResult.Error != nil {
-				log.Error("[RPC请求失败] 获取区块头", "trace_id", traceId, "height", blockHeight, "error", headerResult.Error)
+				log.ErrorWithContext(ctx, "获取区块头失败", "height", blockHeight, "error", headerResult.Error)
 				continue
 			}
 
@@ -439,7 +434,7 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 			}
 		}
 
-		log.Info("[RPC请求成功] 获取最近10个区块头", "trace_id", traceId, "count", len(response))
+		log.InfoWithContext(ctx, "获取最近10个区块头成功", "count", len(response))
 		resultChan <- AsyncResult{
 			Result: response,
 			Error:  nil,
@@ -552,12 +547,11 @@ func FetchChainInfo(ctx context.Context) <-chan AsyncResult {
 	go func() {
 		defer close(resultChan)
 
-		traceId := ctx.Value("trace_id")
-		log.Info("[RPC请求] 获取区块链信息", "trace_id", traceId)
+		log.InfoWithContext(ctx, "获取区块链信息")
 
 		response, err := CallRPC(RpcMethodGetBlockchainInfo, []interface{}{}, false)
 		if err != nil {
-			log.Error("[RPC请求失败] 获取区块链信息", "trace_id", traceId, "error", err)
+			log.ErrorWithContext(ctx, "获取区块链信息失败", "error", err)
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -568,7 +562,7 @@ func FetchChainInfo(ctx context.Context) <-chan AsyncResult {
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
-			log.Error("[RPC响应格式错误] 获取区块链信息", "trace_id", traceId)
+			log.ErrorWithContext(ctx, "获取区块链信息响应格式错误")
 			resultChan <- AsyncResult{
 				Result: nil,
 				Error:  err,
@@ -588,7 +582,7 @@ func FetchChainInfo(ctx context.Context) <-chan AsyncResult {
 			// 继续执行
 		}
 
-		log.Info("[RPC请求成功] 获取区块链信息", "trace_id", traceId)
+		log.InfoWithContext(ctx, "获取区块链信息成功")
 		resultChan <- AsyncResult{
 			Result: responseMap,
 			Error:  nil,
