@@ -18,6 +18,7 @@ const (
 	RpcMethodGetBlockHeader    = "getblockheader"
 	RpcMethodGetInfo           = "getinfo"
 	RpcMethodGetBlockchainInfo = "getblockchaininfo"
+	RpcMethodGetRawMempool     = "getrawmempool"
 )
 
 // BlockInfo 表示区块信息
@@ -796,6 +797,73 @@ func DecodeRawTransaction(ctx context.Context, txid string) <-chan AsyncResult {
 		}
 
 		log.InfoWithContextf(ctx, "成功查询原始交易: %s", txid)
+		resultChan <- AsyncResult{
+			Result: result,
+			Error:  nil,
+		}
+	}()
+
+	return resultChan
+}
+
+// FetchMemPoolTxs 获取内存池中的交易列表（异步）
+func FetchMemPoolTxs(ctx context.Context) <-chan AsyncResult {
+	resultChan := make(chan AsyncResult, 1)
+
+	go func() {
+		defer close(resultChan)
+
+		log.InfoWithContext(ctx, "获取内存池交易列表")
+
+		response, err := CallRPC(RpcMethodGetRawMempool, []interface{}{}, false)
+		if err != nil {
+			log.ErrorWithContext(ctx, "获取内存池交易列表失败", "error", err)
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  err,
+			}
+			return
+		}
+
+		// 验证响应数据类型
+		txids, ok := response.([]interface{})
+		if !ok {
+			err := fmt.Errorf("响应格式错误")
+			log.ErrorWithContext(ctx, "获取内存池交易列表响应格式错误")
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  err,
+			}
+			return
+		}
+
+		// 检查上下文是否已取消
+		select {
+		case <-ctx.Done():
+			resultChan <- AsyncResult{
+				Result: nil,
+				Error:  ctx.Err(),
+			}
+			return
+		default:
+			// 继续执行
+		}
+
+		// 将txids转换为字符串数组
+		txidList := make([]string, 0, len(txids))
+		for _, txid := range txids {
+			if txidStr, ok := txid.(string); ok {
+				txidList = append(txidList, txidStr)
+			}
+		}
+
+		// 构建响应结果
+		result := map[string]interface{}{
+			"tx_count": len(txidList),
+			"txids":    txidList,
+		}
+
+		log.InfoWithContext(ctx, "获取内存池交易列表成功", "count", len(txidList))
 		resultChan <- AsyncResult{
 			Result: result,
 			Error:  nil,

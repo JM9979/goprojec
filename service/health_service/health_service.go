@@ -22,8 +22,6 @@ func (s *HealthService) HealthCheck(c *gin.Context) {
 	ctx := c.Request.Context()
 	log.InfoWithContext(ctx, "HealthCheck")
 	c.JSON(http.StatusOK, gin.H{
-		"code":    200,
-		"message": "Turing API is running.",
-		"data":    gin.H{},
+		"status": "Turing API is running.",
 	})
 }

@@ -12,6 +12,7 @@ import (
 	exchange_service "ginproject/service/exchange_service"
 	ft_service "ginproject/service/ft_service"
 	health_service "ginproject/service/health_service"
+	mempool_service "ginproject/service/mempool_service"
 	nft_service "ginproject/service/nft_service"
 	script_service "ginproject/service/script_service"
 
@@ -104,6 +105,11 @@ func registerRoutes(r *gin.Engine) {
 	// 添加获取区块链信息的路由
 	apiGroup.GET("/chain/info", blockService.GetChainInfo)
 
+	// 注册内存池服务API
+	mempoolService := mempool_service.NewMempoolService()
+	// 添加获取内存池交易列表的路由
+	apiGroup.GET("/mempool/mempool/txs", mempoolService.GetMemPoolTxs)
+
 	// 注册脚本服务API
 	scriptService := script_service.NewScriptService()
 	apiGroup.GET("/script/hash/:script_hash/unspent", scriptService.GetScriptUnspent)
@@ -111,7 +117,6 @@ func registerRoutes(r *gin.Engine) {
 
 	// 注册NFT服务API
 	nftService := nft_service.NewNftService()
-
 	// 1. 获取地址的NFT集合
 	apiGroup.GET("/nft/collection/address/:address/page/:page/size/:size", nftService.GetCollectionsByAddress)
 	// 2. 获取地址的NFT资产
