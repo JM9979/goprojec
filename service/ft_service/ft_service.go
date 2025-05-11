@@ -1,4 +1,4 @@
-package ft
+package ft_service
 
 import (
 	"net/http"
@@ -199,13 +199,13 @@ func (s *FtService) GetPoolNFTInfoByContractId(c *gin.Context) {
 		log.ErrorWithContextf(ctx, "处理NFT池信息查询失败: %v", err)
 
 		// 判断是否是未找到NFT池的错误
-		if err.Error() == "No NFT pool info found." {
+		if err.Error() == "未找到NFT池" {
 			// 返回特定的错误格式
 			c.JSON(http.StatusOK, ft.ErrorResponse{
 				Error: "No pool NFT found.",
 			})
 			return
-		} else if strings.HasPrefix(err.Error(), "Decode pool NFT failed") {
+		} else if strings.HasPrefix(err.Error(), "解码交易失败") {
 			// 返回解码失败的错误
 			c.JSON(http.StatusOK, ft.ErrorResponse{
 				Error: "Decode pool NFT failed.",
@@ -507,6 +507,40 @@ func (s *FtService) GetFtBalanceByCombineScript(c *gin.Context) {
 	if err != nil {
 		log.ErrorWithContextf(ctx, "处理基于脚本的FT余额查询失败: %v", err)
 		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询FT余额失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
+
+// GetLPUnspentByScriptHash 根据脚本哈希获取LP未花费交易输出
+// 路由: GET /v1/tbc/main/ft/lp/unspent/by/script/hash/:script_hash
+func (s *FtService) GetLPUnspentByScriptHash(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.LPUnspentByScriptHashRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	// 验证参数
+	if err := req.Validate(); err != nil {
+		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, err.Error()))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取LP未花费交易输出请求: 脚本哈希=%s", req.ScriptHash)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetLPUnspentByScriptHash(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理LP未花费交易输出查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询LP未花费交易输出失败"))
 		return
 	}
 
