@@ -43,89 +43,89 @@ func main() {
 
 func registerRoutes(r *gin.Engine) {
 	// 创建API路由组，设置前缀
-	apiGroup := r.Group("/v1/tbc/main/")
+	apiGroup := r.Group("/v1/tbc/main")
 
 	// 添加健康检查端点
-	apiGroup.GET("health/", health_service.NewHealthService().HealthCheck)
+	apiGroup.GET("/health", health_service.NewHealthService().HealthCheck)
 
 	// 注册交易所服务API
 	exchangeService := exchange_service.NewExchangeService()
-	apiGroup.GET("exchangerate/", exchangeService.GetExchangeRate)
+	apiGroup.GET("/exchangerate", exchangeService.GetExchangeRate)
 
 	// 注册FT服务API
 	ftService := ft_service.NewFtService()
-	apiGroup.GET("ft/balance/address/:address/contract/:contract_id/", ftService.GetFtBalanceByAddress)
-	apiGroup.GET("ft/utxo/address/:address/contract/:contract_id/", ftService.GetFtUtxoByAddress)
-	apiGroup.GET("ft/info/contract/id/:contract_id/", ftService.GetFtInfoByContractId)
-	apiGroup.POST("ft/balance/address/:address/contract/ids/", ftService.GetMultiFtBalanceByAddress)
-	apiGroup.GET("ft/pool/nft/info/contract/id/:ft_contract_id/", ftService.GetPoolNFTInfoByContractId)
-	apiGroup.GET("ft/history/address/:address/contract/:contract_id/page/:page/size/:size/", ftService.GetFtHistoryByAddress)
+	apiGroup.GET("/ft/balance/address/:address/contract/:contract_id", ftService.GetFtBalanceByAddress)
+	apiGroup.GET("/ft/utxo/address/:address/contract/:contract_id", ftService.GetFtUtxoByAddress)
+	apiGroup.GET("/ft/info/contract/id/:contract_id", ftService.GetFtInfoByContractId)
+	apiGroup.POST("/ft/balance/address/:address/contract/ids", ftService.GetMultiFtBalanceByAddress)
+	apiGroup.GET("/ft/pool/nft/info/contract/id/:ft_contract_id", ftService.GetPoolNFTInfoByContractId)
+	apiGroup.GET("/ft/history/address/:address/contract/:contract_id/page/:page/size/:size", ftService.GetFtHistoryByAddress)
 	// 添加获取代币列表的路由
-	apiGroup.GET("ft/tokens/page/:page/size/:size/orderby/:order_by/", ftService.GetFtTokenList)
+	apiGroup.GET("/ft/tokens/page/:page/size/:size/orderby/:order_by", ftService.GetFtTokenList)
 	// 添加解析FT交易历史的路由
-	apiGroup.GET("ft/decode/tx/history/:txid/", ftService.DecodeFtTransactionHistory)
+	apiGroup.GET("/ft/decode/tx/history/:txid", ftService.DecodeFtTransactionHistory)
 	// 添加获取代币相关流动池列表的路由
-	apiGroup.GET("ft/pools/of/token/contract/id/:ft_contract_id/", ftService.GetPoolsOfTokenByContractId)
+	apiGroup.GET("/ft/pools/of/token/contract/id/:ft_contract_id", ftService.GetPoolsOfTokenByContractId)
 	// 添加获取代币历史交易记录的路由
-	apiGroup.GET("ft/token/history/contract/id/:ft_contract_id/page/:page/size/:size/", ftService.GetTokenHistoryByContractId)
+	apiGroup.GET("/ft/token/history/contract/id/:ft_contract_id/page/:page/size/:size", ftService.GetTokenHistoryByContractId)
 	// 添加获取池子历史记录的路由
-	apiGroup.GET("ft/pool/history/pool/id/:pool_id/page/:page/size/:size/", ftService.GetPoolHistoryByPoolId)
+	apiGroup.GET("/ft/pool/history/pool/id/:pool_id/page/:page/size/:size", ftService.GetPoolHistoryByPoolId)
 	// 添加获取交易池列表的路由
-	apiGroup.GET("ft/pool/list/page/:page/size/:size/", ftService.GetPoolList)
+	apiGroup.GET("/ft/pool/list/page/:page/size/:size", ftService.GetPoolList)
 	// 添加获取地址持有的代币列表的路由
-	apiGroup.GET("ft/tokens/held/by/address/:address/", ftService.GetTokenListHeldByAddress)
+	apiGroup.GET("/ft/tokens/held/by/address/:address", ftService.GetTokenListHeldByAddress)
 	// 添加获取代币持有者排名的路由
-	apiGroup.GET("ft/holder/rank/contract/:contract_id/page/:page/size/:size/", ftService.GetHolderRankByContractId)
+	apiGroup.GET("/ft/holder/rank/contract/:contract_id/page/:page/size/:size", ftService.GetHolderRankByContractId)
 
 	// 注册地址服务API
 	addressService := address_service.NewAddressService()
-	apiGroup.GET("address/:address/unspent/", addressService.GetAddressUnspentUtxos)
+	apiGroup.GET("/address/:address/unspent", addressService.GetAddressUnspentUtxos)
 	// 添加获取地址历史交易的路由
-	apiGroup.GET("address/:address/history/", addressService.GetAddressHistory)
+	apiGroup.GET("/address/:address/history", addressService.GetAddressHistory)
 	// 添加获取地址历史交易分页的路由
-	apiGroup.GET("address/:address/history/page/:page/", addressService.GetAddressHistoryPaged)
+	apiGroup.GET("/address/:address/history/page/:page", addressService.GetAddressHistoryPaged)
 	// 添加获取地址余额的路由
-	apiGroup.GET("address/:address/get/balance/", addressService.GetAddressBalance)
+	apiGroup.GET("/address/:address/get/balance", addressService.GetAddressBalance)
 	// 添加获取地址冻结余额的路由
-	apiGroup.GET("address/:address/get/balance/frozen/", addressService.GetAddressFrozenBalance)
+	apiGroup.GET("/address/:address/get/balance/frozen", addressService.GetAddressFrozenBalance)
 
 	// 注册区块服务API
 	blockService := block_service.NewBlockService()
 	// 添加通过高度获取区块详情的路由
-	apiGroup.GET("block/height/:height/", blockService.GetBlockByHeight)
+	apiGroup.GET("/block/height/:height", blockService.GetBlockByHeight)
 	// 添加通过哈希获取区块详情的路由
-	apiGroup.GET("block/hash/:hash/", blockService.GetBlockByHash)
+	apiGroup.GET("/block/hash/:hash", blockService.GetBlockByHash)
 	// 添加通过高度获取区块头信息的路由
-	apiGroup.GET("block/height/:height/header/", blockService.GetBlockHeaderByHeight)
+	apiGroup.GET("/block/height/:height/header", blockService.GetBlockHeaderByHeight)
 	// 添加通过哈希获取区块头信息的路由
-	apiGroup.GET("block/hash/:hash/header/", blockService.GetBlockHeaderByHash)
+	apiGroup.GET("/block/hash/:hash/header", blockService.GetBlockHeaderByHash)
 	// 添加获取附近10个区块头信息的路由
-	apiGroup.GET("block/headers/", blockService.GetNearby10Headers)
+	apiGroup.GET("/block/headers", blockService.GetNearby10Headers)
 	// 添加获取区块链信息的路由
-	apiGroup.GET("chain/info/", blockService.GetChainInfo)
+	apiGroup.GET("/chain/info", blockService.GetChainInfo)
 
 	// 注册脚本服务API
 	scriptService := script_service.NewScriptService()
-	apiGroup.GET("script/hash/:script_hash/unspent/", scriptService.GetScriptUnspent)
-	apiGroup.GET("script/hash/:script_hash/history/", scriptService.GetScriptHistory)
+	apiGroup.GET("/script/hash/:script_hash/unspent", scriptService.GetScriptUnspent)
+	apiGroup.GET("/script/hash/:script_hash/history", scriptService.GetScriptHistory)
 
 	// 注册NFT服务API
 	nftService := nft_service.NewNftService()
 
 	// 1. 获取地址的NFT集合
-	apiGroup.GET("nft/collection/address/:address/page/:page/size/:size/", nftService.GetCollectionsByAddress)
+	apiGroup.GET("/nft/collection/address/:address/page/:page/size/:size", nftService.GetCollectionsByAddress)
 	// 2. 获取地址的NFT资产
-	apiGroup.GET("nft/address/:address/page/:page/size/:size/", nftService.GetNftsByAddress)
+	apiGroup.GET("/nft/address/:address/page/:page/size/:size", nftService.GetNftsByAddress)
 	// 3. 获取脚本哈希的NFT资产
-	apiGroup.GET("nft/script/hash/:script_hash/page/:page/size/:size/", nftService.GetNftsByScriptHash)
+	apiGroup.GET("/nft/script/hash/:script_hash/page/:page/size/:size", nftService.GetNftsByScriptHash)
 	// 4. 获取集合的NFT资产
-	apiGroup.GET("nft/collection/id/:collection_id/page/:page/size/:size/", nftService.GetNftsByCollectionId)
+	apiGroup.GET("/nft/collection/id/:collection_id/page/:page/size/:size", nftService.GetNftsByCollectionId)
 	// 5. 获取地址的NFT交易历史
-	apiGroup.GET("nft/history/address/:address/page/:page/size/:size/", nftService.GetNftHistory)
+	apiGroup.GET("/nft/history/address/:address/page/:page/size/:size", nftService.GetNftHistory)
 	// 6. 获取所有NFT集合
-	apiGroup.GET("nft/collections/page/:page/size/:size/", nftService.GetAllCollections)
+	apiGroup.GET("/nft/collections/page/:page/size/:size", nftService.GetAllCollections)
 	// 7. 获取集合详细信息
-	apiGroup.GET("nft/collection/info/:collection_id/", nftService.GetDetailCollectionInfo)
+	apiGroup.GET("/nft/collection/info/:collection_id", nftService.GetDetailCollectionInfo)
 	// 8. 根据合约ID获取NFT信息
-	apiGroup.POST("nft/infos/contract_ids/", nftService.GetNftsByContractIds)
+	apiGroup.POST("/nft/infos/contract_ids", nftService.GetNftsByContractIds)
 }
