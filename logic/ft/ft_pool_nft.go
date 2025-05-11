@@ -3,6 +3,7 @@ package ft
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"ginproject/entity/blockchain"
@@ -116,15 +117,24 @@ func (l *FtLogic) parseTapeScriptAndSetResponse(ctx context.Context, decodeTx *b
 	}
 
 	// 获取服务费率
-	var poolServiceFeeRateStr *string = nil
-	if len(tapeScriptAsmList) == 7 {
-		feeRateHex := tapeScriptAsmList[5]
-		poolServiceFeeRateStr = &feeRateHex
-		log.InfoWithContextf(ctx, "获取服务费率: %s", feeRateHex)
-	} else {
-		log.InfoWithContextf(ctx, "磁带脚本长度为%d，服务费率设为nil", len(tapeScriptAsmList))
+	var poolServiceFeeRate *int = nil
+	if len(tapeScriptAsmList) < 6 {
+		log.ErrorWithContextf(ctx, "磁带脚本格式不正确: 元素数量=%d", len(tapeScriptAsmList))
+		return fmt.Errorf("decode pool NFT failed")
+	} else if len(tapeScriptAsmList) == 6 {
+		// 长度为6时，服务费率为nil
+		log.InfoWithContextf(ctx, "磁带脚本长度为6，服务费率设为nil")
+	} else if len(tapeScriptAsmList) == 7 {
+		feeRate := tapeScriptAsmList[5]
+		poolServiceFeeRateInt, err := strconv.Atoi(feeRate)
+		if err != nil {
+			log.ErrorWithContextf(ctx, "解析服务费率失败: %v", err)
+			return fmt.Errorf("decode pool NFT failed")
+		}
+		poolServiceFeeRate = &poolServiceFeeRateInt
+		log.InfoWithContextf(ctx, "获取服务费率: %s", feeRate)
 	}
-	response.PoolServiceFeeRate = poolServiceFeeRateStr
+	response.PoolServiceFeeRate = poolServiceFeeRate
 
 	// 获取复杂部分哈希和余额
 	complexPartialHash := tapeScriptAsmList[2]
