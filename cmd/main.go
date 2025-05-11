@@ -78,6 +78,10 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/ft/tokens/held/by/address/:address", ftService.GetTokenListHeldByAddress)
 	// 添加获取代币持有者排名的路由
 	apiGroup.GET("/ft/holder/rank/contract/:contract_id/page/:page/size/:size", ftService.GetHolderRankByContractId)
+	// 添加根据合并脚本和合约ID获取FT UTXO的路由
+	apiGroup.GET("/ft/utxo/combine/script/:combine_script/contract/:contract_id", ftService.GetFtUtxoByCombineScript)
+	// 添加合并脚本和合约哈希获取FT余额的路由
+	apiGroup.GET("/ft/balance/combine/script/:combine_script/contract/:contract_hash", ftService.GetFtBalanceByCombineScript)
 
 	// 注册地址服务API
 	addressService := address_service.NewAddressService()

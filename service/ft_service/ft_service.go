@@ -443,3 +443,73 @@ func (s *FtService) GetHolderRankByContractId(c *gin.Context) {
 	// 返回成功响应
 	c.JSON(http.StatusOK, response)
 }
+
+// GetFtUtxoByCombineScript 根据合并脚本和合约ID获取FT UTXO列表
+// 路由: GET /v1/tbc/main/ft/utxo/combine/script/:combine_script/contract/:contract_id
+func (s *FtService) GetFtUtxoByCombineScript(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.FtUtxoCombineScriptRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	// 验证请求参数
+	if err := req.Validate(); err != nil {
+		log.ErrorWithContextf(ctx, "验证请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, err.Error()))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取基于合并脚本的FT UTXO请求: 合并脚本=%s, 合约ID=%s",
+		req.CombineScript, req.ContractId)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetFtUtxosByCombineScript(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理基于合并脚本的FT UTXO查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询FT UTXO失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
+
+// GetFtBalanceByCombineScript 根据合并脚本和合约哈希获取FT余额
+// 路由: GET /v1/tbc/main/ft/balance/combine/script/:combine_script/contract/:contract_hash
+func (s *FtService) GetFtBalanceByCombineScript(c *gin.Context) {
+	ctx := c.Request.Context()
+
+	// 绑定请求参数
+	var req ft.FtBalanceCombineScriptRequest
+	if err := c.ShouldBindUri(&req); err != nil {
+		log.ErrorWithContextf(ctx, "绑定请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, "无效的请求参数"))
+		return
+	}
+
+	// 验证请求参数
+	if err := req.Validate(); err != nil {
+		log.ErrorWithContextf(ctx, "验证请求参数失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeInvalidParams, err.Error()))
+		return
+	}
+
+	log.InfoWithContextf(ctx, "获取基于合并脚本的FT余额请求: 合并脚本=%s, 合约哈希=%s",
+		req.CombineScript, req.ContractHash)
+
+	// 调用逻辑层处理业务
+	response, err := s.ftLogic.GetFtBalanceByCombineScript(ctx, &req)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "处理基于脚本的FT余额查询失败: %v", err)
+		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询FT余额失败"))
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, response)
+}
