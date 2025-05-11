@@ -9,6 +9,7 @@ import (
 	"ginproject/service"
 	address_service "ginproject/service/address_service"
 	block_service "ginproject/service/block_service"
+	chain_info_service "ginproject/service/chain_info_service"
 	exchange_service "ginproject/service/exchange_service"
 	ft_service "ginproject/service/ft_service"
 	health_service "ginproject/service/health_service"
@@ -102,8 +103,11 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/block/hash/:hash/header", blockService.GetBlockHeaderByHash)
 	// 添加获取附近10个区块头信息的路由
 	apiGroup.GET("/block/headers", blockService.GetNearby10Headers)
+
+	// 注册区块链信息服务API
+	chainInfoService := chain_info_service.NewChainInfoService()
 	// 添加获取区块链信息的路由
-	apiGroup.GET("/chain/info", blockService.GetChainInfo)
+	apiGroup.GET("/chain/info", chainInfoService.GetChainInfo)
 
 	// 注册内存池服务API
 	mempoolService := mempool_service.NewMempoolService()
