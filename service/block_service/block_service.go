@@ -35,14 +35,14 @@ func (s *blockService) GetBlockByHeight(c *gin.Context) {
 	height, err := strconv.ParseInt(heightStr, 10, 64)
 	if err != nil {
 		log.ErrorWithContext(ctx, "解析区块高度失败", "height", heightStr, "error", err)
-		c.JSON(http.StatusOK, gin.H{"error": "区块高度必须为整数"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "区块高度必须为整数"})
 		return
 	}
 
 	// 验证参数
 	if err := block.ValidateBlockHeight(height); err != nil {
 		log.ErrorWithContext(ctx, "区块高度验证失败", "height", height, "error", err)
-		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -51,7 +51,7 @@ func (s *blockService) GetBlockByHeight(c *gin.Context) {
 	result := <-blockDataChan
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取区块数据失败", "height", height, "error", result.Error)
-		c.JSON(http.StatusOK, gin.H{"error": "获取区块数据失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取区块数据失败"})
 		return
 	}
 
@@ -66,7 +66,7 @@ func (s *blockService) GetBlockByHash(c *gin.Context) {
 	// 验证参数
 	if err := block.ValidateBlockHash(hash); err != nil {
 		log.ErrorWithContext(ctx, "区块哈希验证失败", "hash", hash, "error", err)
-		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -75,7 +75,7 @@ func (s *blockService) GetBlockByHash(c *gin.Context) {
 	result := <-blockDataChan
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取区块数据失败", "hash", hash, "error", result.Error)
-		c.JSON(http.StatusOK, gin.H{"error": "获取区块数据失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取区块数据失败"})
 		return
 	}
 
@@ -89,14 +89,14 @@ func (s *blockService) GetBlockHeaderByHeight(c *gin.Context) {
 	height, err := strconv.ParseInt(heightStr, 10, 64)
 	if err != nil {
 		log.ErrorWithContext(ctx, "解析区块高度失败", "height", heightStr, "error", err)
-		c.JSON(http.StatusOK, gin.H{"error": "区块高度必须为整数"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "区块高度必须为整数"})
 		return
 	}
 
 	// 验证参数
 	if err := block.ValidateBlockHeight(height); err != nil {
 		log.ErrorWithContext(ctx, "区块高度验证失败", "height", height, "error", err)
-		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -105,7 +105,7 @@ func (s *blockService) GetBlockHeaderByHeight(c *gin.Context) {
 	result := <-headerDataChan
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取区块头数据失败", "height", height, "error", result.Error)
-		c.JSON(http.StatusOK, gin.H{"error": "获取区块头数据失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取区块头数据失败"})
 		return
 	}
 
@@ -120,7 +120,7 @@ func (s *blockService) GetBlockHeaderByHash(c *gin.Context) {
 	// 验证参数
 	if err := block.ValidateBlockHash(hash); err != nil {
 		log.ErrorWithContext(ctx, "区块哈希验证失败", "hash", hash, "error", err)
-		c.JSON(http.StatusOK, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
@@ -129,7 +129,7 @@ func (s *blockService) GetBlockHeaderByHash(c *gin.Context) {
 	result := <-headerDataChan
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取区块头数据失败", "hash", hash, "error", result.Error)
-		c.JSON(http.StatusOK, gin.H{"error": "获取区块头数据失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取区块头数据失败"})
 		return
 	}
 
@@ -144,18 +144,11 @@ func (s *blockService) GetNearby10Headers(c *gin.Context) {
 	result := <-headersDataChan
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取最近10个区块头数据失败", "error", result.Error)
-		c.JSON(http.StatusOK, gin.H{"error": "获取最近10个区块头数据失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取最近10个区块头数据失败"})
 		return
 	}
 
-	headersData, ok := result.Result.([]interface{})
-	if !ok || len(headersData) == 0 {
-		log.WarnWithContext(ctx, "未找到区块头数据")
-		c.JSON(http.StatusNotFound, gin.H{"error": "未找到区块头数据"})
-		return
-	}
-
-	c.JSON(http.StatusOK, headersData)
+	c.JSON(http.StatusOK, result.Result)
 }
 
 // GetChainInfo 获取区块链信息
@@ -166,14 +159,14 @@ func (s *blockService) GetChainInfo(c *gin.Context) {
 	result := <-chainInfoChan
 	if result.Error != nil {
 		log.ErrorWithContext(ctx, "获取区块链信息失败", "error", result.Error)
-		c.JSON(http.StatusOK, gin.H{"error": "获取区块链信息失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取区块链信息失败"})
 		return
 	}
 
 	chainInfoData, ok := result.Result.(map[string]interface{})
 	if !ok {
 		log.ErrorWithContext(ctx, "区块链信息格式不正确")
-		c.JSON(http.StatusOK, gin.H{"error": "获取区块链信息失败"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取区块链信息失败"})
 		return
 	}
 
