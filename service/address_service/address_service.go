@@ -6,8 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"ginproject/entity/utility"
 	"ginproject/logic/address"
 	"ginproject/middleware/log"
+	rpcex "ginproject/repo/rpc/electrumx"
 )
 
 // AddressService 地址服务
@@ -34,23 +36,54 @@ func (s *AddressService) GetAddressUnspentUtxos(c *gin.Context) {
 
 	// 参数验证
 	if address == "" {
-		c.JSON(http.StatusOK, gin.H{
+		c.JSON(http.StatusBadRequest, gin.H{
 			"code":    http.StatusBadRequest,
 			"message": "地址参数不能为空",
 		})
 		return
 	}
 
-	// 调用业务逻辑层
-	utxos, err := s.addressLogic.GetAddressUnspentUtxos(ctx, address)
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取地址UTXO失败", err)
-		c.JSON(http.StatusOK, gin.H{
-			"code":    http.StatusInternalServerError,
-			"message": "获取地址UTXO失败: " + err.Error(),
+	// 验证地址合法性
+	valid, addrType, err := utility.ValidateWIFAddress(address)
+	if err != nil || !valid {
+		log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "无效的地址格式: " + err.Error(),
 		})
 		return
 	}
+
+	log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
+
+	// 将地址转换为脚本哈希
+	scriptHash, err := utility.AddressToScriptHash(address)
+	if err != nil {
+		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "地址转换失败: " + err.Error(),
+		})
+		return
+	}
+
+	log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
+
+	// 调用RPC获取UTXO列表
+	utxos, err := rpcex.GetListUnspent(ctx, scriptHash)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取UTXO失败",
+			"address:", address,
+			"scriptHash:", scriptHash,
+			"错误:", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "获取UTXO失败: " + err.Error(),
+		})
+		return
+	}
+
+	log.InfoWithContext(ctx, "成功获取地址UTXO", "address:", address, "count:", len(utxos))
 
 	// 返回成功响应
 	c.JSON(http.StatusOK, utxos)

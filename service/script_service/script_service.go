@@ -74,7 +74,7 @@ func (s *ScriptService) GetScriptHistory(c *gin.Context) {
 		"scriptHash", scriptHash)
 
 	// 调用RPC获取脚本历史记录
-	history, err := electrumx.GetScriptHashHistory(scriptHash)
+	history, err := electrumx.GetScriptHashHistory(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取脚本历史记录失败",
 			"scriptHash", scriptHash,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"ginproject/entity/blockchain"
 	entityElectrumx "ginproject/entity/electrumx"
 	"ginproject/entity/ft"
 	"ginproject/entity/utility"
@@ -44,7 +45,7 @@ func (l *FtLogic) GetTokenHistory(ctx context.Context, req *ft.FtTokenHistoryReq
 		req.FtContractId, ftCodeScriptHash)
 
 	// 获取脚本历史交易列表
-	ftHistoryTxs, err := repoElectrumx.GetScriptHashHistoryAsync2(ctx, ftCodeScriptHash)
+	ftHistoryTxs, err := repoElectrumx.GetScriptHashHistory(ctx, ftCodeScriptHash)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取脚本历史失败: %v", err)
 		return nil, fmt.Errorf("获取脚本历史失败: %v", err)
@@ -112,10 +113,18 @@ func (l *FtLogic) GetTokenHistory(ctx context.Context, req *ft.FtTokenHistoryReq
 // decodeTxHistory 解析交易历史
 func (l *FtLogic) decodeTxHistory(ctx context.Context, txid string) (*ft.FtTxDecodeResponse, error) {
 	// 调用区块链RPC获取交易详情
-	decodeTx, err := repoBlockchain.DecodeTx(ctx, txid)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取交易详情失败: %v", err)
-		return nil, fmt.Errorf("获取交易详情失败: %v", err)
+	ResultChan := repoBlockchain.DecodeTx(ctx, txid)
+	result := <-ResultChan
+	if result.Error != nil {
+		log.ErrorWithContextf(ctx, "获取交易详情失败: %v", result.Error)
+		return nil, fmt.Errorf("获取交易详情失败: %v", result.Error)
+	}
+
+	// 类型断言获取交易详情
+	decodeTx, ok := result.Result.(*blockchain.TransactionResponse)
+	if !ok {
+		log.ErrorWithContextf(ctx, "交易详情类型转换失败")
+		return nil, fmt.Errorf("交易详情类型转换失败")
 	}
 
 	// 初始化输入输出列表

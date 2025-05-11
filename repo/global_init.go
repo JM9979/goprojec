@@ -3,9 +3,11 @@ package repo
 import (
 	"fmt"
 
-	"ginproject/middleware/conf"
+	"ginproject/entity/config"
 	"ginproject/middleware/log"
 	"ginproject/middleware/trace"
+	"ginproject/middleware/conf"
+
 	"ginproject/repo/db"
 	"ginproject/repo/rpc/blockchain"
 	"ginproject/repo/rpc/electrumx"
@@ -14,29 +16,27 @@ import (
 // Global_init 全局初始化
 func Global_init() error {
 
-	// 加载配置
-	if err := conf.LoadConfig(); err != nil {
+	// 加载配置	
+	if err := conf.GetManager().LoadConfig(); err != nil {
 		return fmt.Errorf("配置初始化失败: %w", err)
 	}
 
 	// 启用配置文件监视
-	err := conf.EnableWatch(func() {
+	err := conf.GetManager().EnableWatch(func() {
 		// 配置更改时的回调函数
-		log.Info("检测到配置文件变更，已重新加载")
+		log.Info("检测到配置文件变更，已重新加载", config.GetConfig())
 	})
 	if err != nil {
 		return fmt.Errorf("启用配置监视失败: %w", err)
 	}
 
 	// 获取服务名称
-	serverName := conf.GetServerName()
-
+	serverName := config.GetConfig().GetServerConfig().Name
 	// 获取并解析日志配置
-	logConfig := conf.GetLogConfig()
-
+	logConfig := config.GetConfig().GetLogConfig()
 	// 解析日志路径中的变量
 	// 例如: ./logs/${server.name}.log 会被解析为 ./logs/ginproject.log
-	logConfig.Path = conf.ParseLogPath()
+	logConfig.Path = conf.GetManager().ParseLogPath()
 
 	// 初始化日志
 	if err := log.InitLogger(logConfig, serverName); err != nil {

@@ -74,20 +74,21 @@ func (l *FtLogic) GetPoolHistoryPageSize(ctx context.Context, poolId string, pag
 
 // getPoolTransaction 获取池子交易详情
 func (l *FtLogic) getPoolTransaction(ctx context.Context, poolId string) (map[string]interface{}, error) {
-	decodeTx, err := blockchain.DecodeRawTransaction(ctx, poolId)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取池子交易详情失败: %v", err)
-		return nil, err
+	resultChan := blockchain.DecodeRawTransaction(ctx, poolId)
+	result := <-resultChan
+	if result.Error != nil {
+		log.ErrorWithContextf(ctx, "获取池子交易详情失败: %v", result.Error)
+		return nil, result.Error
 	}
 
 	// 确保交易数据有效
-	if decodeTx == nil {
+	if result.Result == nil {
 		log.ErrorWithContextf(ctx, "获取到的池子交易详情为空")
 		return nil, nil
 	}
 
 	// 将interface{}转换为map以便访问
-	txMap, ok := decodeTx.(map[string]interface{})
+	txMap, ok := result.Result.(map[string]interface{})
 	if !ok {
 		log.ErrorWithContextf(ctx, "交易数据类型转换失败")
 		return nil, fmt.Errorf("交易数据类型转换失败")
@@ -135,7 +136,7 @@ func (l *FtLogic) getPoolScriptHash(ctx context.Context, txMap map[string]interf
 
 // getPagedScriptHistory 获取分页的脚本历史记录
 func (l *FtLogic) getPagedScriptHistory(ctx context.Context, scriptHash string, page int, size int) ([]map[string]interface{}, error) {
-	scriptHistory, err := electrumx.GetScriptHashHistoryAsync2(ctx, scriptHash)
+	scriptHistory, err := electrumx.GetScriptHashHistory(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取脚本历史记录失败: %v", err)
 		return nil, err
@@ -176,12 +177,13 @@ func (l *FtLogic) getPagedScriptHistory(ctx context.Context, scriptHash string, 
 // processHistoryTransaction 处理历史交易
 func (l *FtLogic) processHistoryTransaction(ctx context.Context, txHash string, poolId string) (ft.TBC20PoolHistoryResponse, error) {
 	// 获取历史交易详情
-	historyDecodeTx, err := blockchain.DecodeRawTransaction(ctx, txHash)
-	if err != nil {
-		return ft.TBC20PoolHistoryResponse{}, fmt.Errorf("获取历史交易详情失败: %v", err)
+	ResultChan := blockchain.DecodeRawTransaction(ctx, txHash)
+	result := <-ResultChan
+	if result.Error != nil {
+		return ft.TBC20PoolHistoryResponse{}, fmt.Errorf("获取历史交易详情失败: %v", result.Error)
 	}
 
-	historyTxMap, ok := historyDecodeTx.(map[string]interface{})
+	historyTxMap, ok := result.Result.(map[string]interface{})
 	if !ok {
 		return ft.TBC20PoolHistoryResponse{}, fmt.Errorf("历史交易数据类型转换失败")
 	}
@@ -288,13 +290,14 @@ func (l *FtLogic) getLastPoolBalance(ctx context.Context, vinArray []interface{}
 		return 0, 0, 0
 	}
 
-	decodedLastTx, err := blockchain.DecodeRawTransaction(ctx, lastTxid)
-	if err != nil {
-		log.WarnWithContextf(ctx, "获取上一笔交易失败: %v", err)
+	ResultChan := blockchain.DecodeRawTransaction(ctx, lastTxid)
+	result := <-ResultChan
+	if result.Error != nil {
+		log.WarnWithContextf(ctx, "获取上一笔交易失败: %v", result.Error)
 		return 0, 0, 0
 	}
 
-	decodedLastTxMap, ok := decodedLastTx.(map[string]interface{})
+	decodedLastTxMap, ok := result.Result.(map[string]interface{})
 	if !ok {
 		return 0, 0, 0
 	}

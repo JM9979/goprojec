@@ -18,6 +18,12 @@ import (
 	rpcex "ginproject/repo/rpc/electrumx"
 )
 
+// AsyncUtxoResult 异步UTXO结果
+type AsyncUtxoResult struct {
+	Utxos electrumx.UtxoResponse
+	Error error
+}
+
 // AddressLogic 地址业务逻辑
 type AddressLogic struct{}
 
@@ -26,41 +32,60 @@ func NewAddressLogic() *AddressLogic {
 	return &AddressLogic{}
 }
 
-// GetAddressUnspentUtxos 获取地址的未花费交易输出
-func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address string) (electrumx.UtxoResponse, error) {
-	// 记录开始处理的日志
-	log.InfoWithContext(ctx, "开始获取地址的UTXO", "address:", address)
+// GetAddressUnspentUtxos 获取地址的未花费交易输出（异步版本）
+func (l *AddressLogic) GetAddressUnspentUtxos(ctx context.Context, address string) chan *AsyncUtxoResult {
+	resultChan := make(chan *AsyncUtxoResult, 1)
 
-	// 验证地址合法性
-	valid, addrType, err := utility.ValidateWIFAddress(address)
-	if err != nil || !valid {
-		log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
-		return nil, fmt.Errorf("无效的地址格式: %w", err)
-	}
+	go func() {
+		defer close(resultChan)
 
-	log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
+		// 记录开始处理的日志
+		log.InfoWithContext(ctx, "开始获取地址的UTXO", "address:", address)
 
-	// 将地址转换为脚本哈希
-	scriptHash, err := utility.AddressToScriptHash(address)
-	if err != nil {
-		log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
-		return nil, fmt.Errorf("地址转换失败: %w", err)
-	}
+		// 验证地址合法性
+		valid, addrType, err := utility.ValidateWIFAddress(address)
+		if err != nil || !valid {
+			log.ErrorWithContext(ctx, "地址验证失败", "address:", address, "错误:", err)
+			resultChan <- &AsyncUtxoResult{
+				Error: fmt.Errorf("无效的地址格式: %w", err),
+			}
+			return
+		}
 
-	log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
+		log.InfoWithContext(ctx, "地址验证通过", "address:", address, "type:", addrType)
 
-	// 调用RPC获取UTXO列表
-	utxos, err := rpcex.GetListUnspent(scriptHash)
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取UTXO失败",
-			"address:", address,
-			"scriptHash:", scriptHash,
-			"错误:", err)
-		return nil, fmt.Errorf("获取UTXO失败: %w", err)
-	}
+		// 将地址转换为脚本哈希
+		scriptHash, err := utility.AddressToScriptHash(address)
+		if err != nil {
+			log.ErrorWithContext(ctx, "地址转换为脚本哈希失败", "address:", address, "错误:", err)
+			resultChan <- &AsyncUtxoResult{
+				Error: fmt.Errorf("地址转换失败: %w", err),
+			}
+			return
+		}
 
-	log.InfoWithContext(ctx, "成功获取地址UTXO", "address:", address, "count:", len(utxos))
-	return utxos, nil
+		log.InfoWithContext(ctx, "地址已转换为脚本哈希", "address:", address, "scriptHash:", scriptHash)
+
+		// 调用RPC获取UTXO列表
+		utxos, err := rpcex.GetListUnspent(ctx, scriptHash)
+		if err != nil {
+			log.ErrorWithContext(ctx, "获取UTXO失败",
+				"address:", address,
+				"scriptHash:", scriptHash,
+				"错误:", err)
+			resultChan <- &AsyncUtxoResult{
+				Error: fmt.Errorf("获取UTXO失败: %w", err),
+			}
+			return
+		}
+
+		log.InfoWithContext(ctx, "成功获取地址UTXO", "address:", address, "count:", len(utxos))
+		resultChan <- &AsyncUtxoResult{
+			Utxos: utxos,
+		}
+	}()
+
+	return resultChan
 }
 
 // GetAddressHistoryPage 获取地址历史交易信息（支持分页）
@@ -136,7 +161,7 @@ func (l *AddressLogic) getPagedHistory(ctx context.Context, address, scriptHash 
 	err error,
 ) {
 	// 获取交易历史记录
-	historyResponse, err := rpcex.GetScriptHashHistory(scriptHash)
+	historyResponse, err := rpcex.GetScriptHashHistory(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取交易历史失败",
 			"address:", address,
@@ -211,11 +236,19 @@ func (l *AddressLogic) processTransactionItem(ctx context.Context, address strin
 
 	// 获取交易详情
 	log.InfoWithContext(ctx, "开始获取交易详情", "txid:", txid)
-	decodedInfo, err := rpcbchain.DecodeTx(ctx, txid)
-	if err != nil {
+	ResultChan := rpcbchain.DecodeTx(ctx, txid)
+	result := <-ResultChan
+	if result.Error != nil {
 		log.WarnWithContext(ctx, "获取交易详情失败，跳过此记录",
 			"txid:", txid,
-			"错误:", err)
+			"错误:", result.Error)
+		return electrumx.HistoryItem{}, false
+	}
+
+	// 类型断言获取交易详情
+	decodedInfo, ok := result.Result.(*blockchain.TransactionResponse)
+	if !ok {
+		log.WarnWithContext(ctx, "交易详情类型转换失败，跳过此记录", "txid:", txid)
 		return electrumx.HistoryItem{}, false
 	}
 
@@ -328,11 +361,19 @@ func (l *AddressLogic) processTransactionInputs(
 			vinVout := vin.Vout
 
 			// 获取前一个交易的输出信息
-			vinDecoded, err := rpcbchain.DecodeTx(ctx, vinTxid)
-			if err != nil {
+			ResultChan := rpcbchain.DecodeTx(ctx, vinTxid)
+			result := <-ResultChan
+			if result.Error != nil {
 				log.WarnWithContext(ctx, "获取输入交易详情失败",
 					"vin_txid:", vinTxid,
-					"错误:", err)
+					"错误:", result.Error)
+				continue
+			}
+
+			// 类型断言获取交易详情
+			vinDecoded, ok := result.Result.(*blockchain.TransactionResponse)
+			if !ok {
+				log.WarnWithContext(ctx, "输入交易详情类型转换失败", "vin_txid:", vinTxid)
 				continue
 			}
 
@@ -429,21 +470,28 @@ func (l *AddressLogic) getTransactionTimestamp(ctx context.Context, item electru
 		timeStamp = 0
 	} else {
 		// 使用getblockbyheight获取区块信息，与Python版本保持一致
-		blockInfo, err := rpcbchain.GetBlockByHeight(ctx, int64(item.Height))
-		if err != nil {
+		blockInfoChan := rpcbchain.GetBlockByHeight(ctx, int64(item.Height))
+		result := <-blockInfoChan
+		if result.Error != nil {
 			log.ErrorWithContext(ctx, "获取区块信息失败",
 				"height:", item.Height,
-				"错误:", err)
+				"错误:", result.Error)
 			timeStamp = 0
 		} else {
-			timeValue, ok := blockInfo["time"].(float64)
+			blockInfo, ok := result.Result.(map[string]interface{})
 			if !ok {
-				log.ErrorWithContext(ctx, "区块时间戳类型转换失败", "blockInfo", blockInfo)
+				log.ErrorWithContext(ctx, "区块信息格式不正确", "result", result.Result)
 				timeStamp = 0
 			} else {
-				timeStamp = int64(timeValue)
+				timeValue, ok := blockInfo["time"].(float64)
+				if !ok {
+					log.ErrorWithContext(ctx, "区块时间戳类型转换失败", "blockInfo", blockInfo)
+					timeStamp = 0
+				} else {
+					timeStamp = int64(timeValue)
+				}
+				utcTime = time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
 			}
-			utcTime = time.Unix(timeStamp, 0).UTC().Format("2006-01-02 15:04:05")
 		}
 	}
 
@@ -501,7 +549,7 @@ func (l *AddressLogic) GetAddressBalance(ctx context.Context, address string) (*
 	}
 
 	// 调用RPC获取余额
-	balanceResponse, err := rpcex.GetBalance(scriptHash)
+	balanceResponse, err := rpcex.GetBalance(ctx, scriptHash)
 	if err != nil {
 		log.ErrorWithContext(ctx, "获取地址余额失败：RPC调用错误",
 			"address:", address,

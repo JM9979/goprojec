@@ -46,14 +46,15 @@ func (s *blockService) GetBlockByHeight(c *gin.Context) {
 	}
 
 	// 调用RPC获取区块信息
-	blockData, err := blockchain.FetchBlockByHeight(c.Request.Context(), height)
-	if err != nil {
-		log.Error("获取区块数据失败", "height", height, "error", err)
+	blockDataChan := blockchain.FetchBlockByHeight(c.Request.Context(), height)
+	result := <-blockDataChan
+	if result.Error != nil {
+		log.Error("获取区块数据失败", "height", height, "error", result.Error)
 		c.JSON(http.StatusOK, gin.H{"error": "获取区块数据失败"})
 		return
 	}
 
-	c.JSON(http.StatusOK, blockData)
+	c.JSON(http.StatusOK, result.Result)
 }
 
 // GetBlockByHash 通过哈希获取区块详情
@@ -68,14 +69,15 @@ func (s *blockService) GetBlockByHash(c *gin.Context) {
 	}
 
 	// 调用RPC获取区块信息
-	blockData, err := blockchain.FetchBlockByHash(c.Request.Context(), hash)
-	if err != nil {
-		log.Error("获取区块数据失败", "hash", hash, "error", err)
+	blockDataChan := blockchain.FetchBlockByHash(c.Request.Context(), hash)
+	result := <-blockDataChan
+	if result.Error != nil {
+		log.Error("获取区块数据失败", "hash", hash, "error", result.Error)
 		c.JSON(http.StatusOK, gin.H{"error": "获取区块数据失败"})
 		return
 	}
 
-	c.JSON(http.StatusOK, blockData)
+	c.JSON(http.StatusOK, result.Result)
 }
 
 // GetBlockHeaderByHeight 通过高度获取区块头信息
@@ -96,14 +98,15 @@ func (s *blockService) GetBlockHeaderByHeight(c *gin.Context) {
 	}
 
 	// 调用RPC获取区块头信息
-	headerData, err := blockchain.FetchBlockHeaderByHeight(c.Request.Context(), height)
-	if err != nil {
-		log.Error("获取区块头数据失败", "height", height, "error", err)
+	headerDataChan := blockchain.FetchBlockHeaderByHeight(c.Request.Context(), height)
+	result := <-headerDataChan
+	if result.Error != nil {
+		log.Error("获取区块头数据失败", "height", height, "error", result.Error)
 		c.JSON(http.StatusOK, gin.H{"error": "获取区块头数据失败"})
 		return
 	}
 
-	c.JSON(http.StatusOK, headerData)
+	c.JSON(http.StatusOK, result.Result)
 }
 
 // GetBlockHeaderByHash 通过哈希获取区块头信息
@@ -118,27 +121,30 @@ func (s *blockService) GetBlockHeaderByHash(c *gin.Context) {
 	}
 
 	// 调用RPC获取区块头信息
-	headerData, err := blockchain.FetchBlockHeaderByHash(c.Request.Context(), hash)
-	if err != nil {
-		log.Error("获取区块头数据失败", "hash", hash, "error", err)
+	headerDataChan := blockchain.FetchBlockHeaderByHash(c.Request.Context(), hash)
+	result := <-headerDataChan
+	if result.Error != nil {
+		log.Error("获取区块头数据失败", "hash", hash, "error", result.Error)
 		c.JSON(http.StatusOK, gin.H{"error": "获取区块头数据失败"})
 		return
 	}
 
-	c.JSON(http.StatusOK, headerData)
+	c.JSON(http.StatusOK, result.Result)
 }
 
 // GetNearby10Headers 获取附近的10个区块头信息
 func (s *blockService) GetNearby10Headers(c *gin.Context) {
 	// 调用RPC获取最近10个区块头信息
-	headersData, err := blockchain.FetchNearby10Headers(c.Request.Context())
-	if err != nil {
-		log.Error("获取最近10个区块头数据失败", "error", err)
+	headersDataChan := blockchain.FetchNearby10Headers(c.Request.Context())
+	result := <-headersDataChan
+	if result.Error != nil {
+		log.Error("获取最近10个区块头数据失败", "error", result.Error)
 		c.JSON(http.StatusOK, gin.H{"error": "获取最近10个区块头数据失败"})
 		return
 	}
 
-	if len(headersData) == 0 {
+	headersData, ok := result.Result.([]interface{})
+	if !ok || len(headersData) == 0 {
 		log.Warn("未找到区块头数据")
 		c.JSON(http.StatusNotFound, gin.H{"error": "未找到区块头数据"})
 		return
@@ -150,9 +156,17 @@ func (s *blockService) GetNearby10Headers(c *gin.Context) {
 // GetChainInfo 获取区块链信息
 func (s *blockService) GetChainInfo(c *gin.Context) {
 	// 调用RPC获取区块链信息
-	chainInfoData, err := blockchain.FetchChainInfo(c.Request.Context())
-	if err != nil {
-		log.Error("获取区块链信息失败", "error", err)
+	chainInfoChan := blockchain.FetchChainInfo(c.Request.Context())
+	result := <-chainInfoChan
+	if result.Error != nil {
+		log.Error("获取区块链信息失败", "error", result.Error)
+		c.JSON(http.StatusOK, gin.H{"error": "获取区块链信息失败"})
+		return
+	}
+
+	chainInfoData, ok := result.Result.(map[string]interface{})
+	if !ok {
+		log.Error("区块链信息格式不正确")
 		c.JSON(http.StatusOK, gin.H{"error": "获取区块链信息失败"})
 		return
 	}
