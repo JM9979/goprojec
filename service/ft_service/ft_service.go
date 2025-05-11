@@ -378,7 +378,7 @@ func (s *FtService) GetPoolHistoryByPoolId(c *gin.Context) {
 		req.PoolId, req.Page, req.Size)
 
 	// 调用逻辑层处理业务
-	response, err := s.ftLogic.GetPoolHistoryByPoolId(ctx, &req)
+	response, err := s.ftLogic.GetPoolHistory(ctx, &req)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "处理池子历史记录查询失败: %v", err)
 		c.JSON(http.StatusOK, utility.NewErrorResponse(constant.CodeServerError, "查询池子历史记录失败"))
