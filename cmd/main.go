@@ -14,6 +14,7 @@ import (
 	ft_service "ginproject/service/ft_service"
 	health_service "ginproject/service/health_service"
 	mempool_service "ginproject/service/mempool_service"
+	multisig_service "ginproject/service/multisig_service"
 	nft_service "ginproject/service/nft_service"
 	script_service "ginproject/service/script_service"
 
@@ -122,6 +123,11 @@ func registerRoutes(r *gin.Engine) {
 	scriptService := script_service.NewScriptService()
 	apiGroup.GET("/script/hash/:script_hash/unspent", scriptService.GetScriptUnspent)
 	apiGroup.GET("/script/hash/:script_hash/history", scriptService.GetScriptHistory)
+
+	// 注册多签名服务API
+	multisigService := multisig_service.NewMultisigService()
+	// 添加根据地址获取多签名地址及其公钥列表的路由
+	apiGroup.GET("/multisig/pubkeys/address/:address", multisigService.GetMultiWalletByAddress)
 
 	// 注册NFT服务API
 	nftService := nft_service.NewNftService()

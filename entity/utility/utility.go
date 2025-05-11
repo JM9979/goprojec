@@ -749,3 +749,44 @@ func doubleSHA256(data []byte) []byte {
 	hash2 := sha256.Sum256(hash1[:])
 	return hash2[:]
 }
+
+// ConvertAddressToMultiSigScriptHash 将地址转换为多签名脚本哈希
+// 参考Python函数convert_address_to_multi_sig_script_hash的Go语言实现
+func ConvertAddressToMultiSigScriptHash(address string) (string, error) {
+	if address == "" {
+		return "", fmt.Errorf("地址不能为空")
+	}
+
+	// Base58解码地址
+	decoded, version, err := base58.CheckDecode(address)
+	if err != nil {
+		return "", fmt.Errorf("无效地址 '%s': %v", address, err)
+	}
+
+	// 记录版本号，但不使用
+	_ = version
+
+	// 构建脚本
+	// P2PKH脚本部分: OP_DUP OP_HASH160 <pubKeyHash> OP_EQUALVERIFY OP_CHECKSIG
+	script := []byte{0x76, 0xa9, 0x14}  // OP_DUP OP_HASH160 OP_DATA_20
+	script = append(script, decoded...) // 公钥哈希
+	script = append(script, 0x88, 0xac) // OP_EQUALVERIFY OP_CHECKSIG
+
+	// 添加多签名标记 OP_RETURN "multisig"
+	script = append(script, 0x6a, 0x08)                                     // OP_RETURN OP_PUSHBYTES_8
+	script = append(script, 0x6d, 0x75, 0x6c, 0x74, 0x69, 0x73, 0x69, 0x67) // "multisig"
+
+	// 计算SHA256哈希
+	hash := sha256.Sum256(script)
+
+	// 转换为小端序（反转字节顺序）
+	reversed := make([]byte, len(hash))
+	for i := 0; i < len(hash); i++ {
+		reversed[i] = hash[len(hash)-1-i]
+	}
+
+	// 转换为十六进制字符串
+	scriptHash := hex.EncodeToString(reversed)
+
+	return scriptHash, nil
+}
