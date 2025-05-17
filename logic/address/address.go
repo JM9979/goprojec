@@ -210,21 +210,47 @@ func (l *AddressLogic) getPagedHistory(ctx context.Context, address, scriptHash 
 	return historyCount, neededItems, nil
 }
 
-// processHistoryItems 处理历史交易记录
+// processHistoryItems 处理历史交易记录（使用并发工作池）
 func (l *AddressLogic) processHistoryItems(ctx context.Context, address string, neededItems electrumx.ElectrumXHistoryResponse) []electrumx.HistoryItem {
-	// 创建结果列表
-	result := make([]electrumx.HistoryItem, 0, len(neededItems))
-
-	// 处理每条交易记录
-	for _, item := range neededItems {
-		historyItem, ok := l.processTransactionItem(ctx, address, item)
-		if !ok {
-			continue
-		}
-		result = append(result, historyItem)
+	// 如果没有需要处理的项，则返回空结果
+	if len(neededItems) == 0 {
+		return []electrumx.HistoryItem{}
 	}
 
-	return result
+	// 记录开始处理时间，用于性能监控
+	startTime := time.Now()
+	log.InfoWithContext(ctx, "开始并发处理历史交易记录",
+		"address:", address,
+		"items_count:", len(neededItems))
+
+	// 创建历史交易处理器函数
+	processor := func(ctx context.Context, item electrumx.ElectrumXHistoryItem) (electrumx.HistoryItem, error) {
+		log.InfoWithContext(ctx, "处理交易项", "txid:", item.TxHash)
+		historyItem, ok := l.processTransactionItem(ctx, address, item)
+		if !ok {
+			return electrumx.HistoryItem{}, fmt.Errorf("处理交易 %s 失败", item.TxHash)
+		}
+		return historyItem, nil
+	}
+
+	// 使用工作池处理所有交易记录，并发数为10
+	results, errors := utility.WorkerPoolWithContext(ctx, neededItems, 10, processor)
+
+	// 记录处理结果统计
+	log.InfoWithContext(ctx, "历史交易处理统计",
+		"address:", address,
+		"successful:", len(results),
+		"errors:", len(errors),
+		"total_duration_ms:", time.Since(startTime).Milliseconds())
+
+	if len(errors) > 0 {
+		// 记录处理失败的交易信息，但继续返回成功的结果
+		log.WarnWithContext(ctx, "部分交易处理失败",
+			"address:", address,
+			"error_count:", len(errors))
+	}
+
+	return results
 }
 
 // processTransactionItem 处理单个交易记录
