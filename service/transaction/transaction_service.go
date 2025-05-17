@@ -65,7 +65,7 @@ func (s *TransactionService) DecodeTxRaw(c *gin.Context) {
 		return
 	}
 
-	// 返回结果
+	// 直接返回结果，不进行处理
 	c.JSON(statusCode, resp)
 }
 
@@ -120,7 +120,7 @@ func (s *TransactionService) DecodeTxByHash(c *gin.Context) {
 		return
 	}
 
-	// 返回结果
+	// 直接返回结果，不进行处理
 	c.JSON(statusCode, resp)
 }
 
