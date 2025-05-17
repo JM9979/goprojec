@@ -23,6 +23,8 @@ tbcnode:
   user: "tbcuser"
   password: "randompasswd" 
   timeout: 30 # 连接超时时间(秒)
+  maxidleconns: 10
+  maxopenconns: 50
 
 # ElectrumX RPC配置
 electrumx:

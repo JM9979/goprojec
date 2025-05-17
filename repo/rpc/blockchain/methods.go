@@ -61,16 +61,20 @@ func GetBlockByHeightStructured(ctx context.Context, height int) <-chan AsyncRes
 		// 记录开始调用日志
 		log.InfoWithContext(ctx, "开始获取区块信息", "height:", height)
 
-		// 调用区块链节点RPC
-		result, err := CallRPC("getblockbyheight", []interface{}{height, true}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取区块信息失败", "height:", height, "错误:", err)
+		// 调用区块链节点RPC（使用异步方式）
+		asyncChan := CallRPCAsync(ctx, "getblockbyheight", []interface{}{height, true}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "获取区块信息失败", "height:", height, "错误:", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("获取区块信息失败: %w", err),
+				Error:  fmt.Errorf("获取区块信息失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 将返回结果转换为BlockInfo结构
 		var blockInfo BlockInfo
@@ -127,15 +131,20 @@ func FetchBlockByHeight(ctx context.Context, height int64) <-chan AsyncResult {
 
 		log.InfoWithContext(ctx, "通过高度获取区块", "height", height)
 
-		response, err := CallRPC(RpcMethodGetBlockByHeight, []interface{}{height}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "通过高度获取区块失败", "height", height, "error", err)
+		// 使用异步RPC调用
+		responseChan := CallRPCAsync(ctx, RpcMethodGetBlockByHeight, []interface{}{height}, false)
+		asyncResult := <-responseChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "通过高度获取区块失败", "height", height, "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  asyncResult.Error,
 			}
 			return
 		}
+
+		response := asyncResult.Result
 
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
@@ -179,15 +188,20 @@ func FetchBlockByHash(ctx context.Context, hash string) <-chan AsyncResult {
 
 		log.InfoWithContext(ctx, "通过哈希获取区块", "hash", hash)
 
-		response, err := CallRPC(RpcMethodGetBlock, []interface{}{hash}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "通过哈希获取区块失败", "hash", hash, "error", err)
+		// 使用异步RPC调用
+		responseChan := CallRPCAsync(ctx, RpcMethodGetBlock, []interface{}{hash}, false)
+		asyncResult := <-responseChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "通过哈希获取区块失败", "hash", hash, "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  asyncResult.Error,
 			}
 			return
 		}
+
+		response := asyncResult.Result
 
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
@@ -231,18 +245,20 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 
 		log.InfoWithContext(ctx, "通过高度获取区块头", "height", height)
 
-		// 先获取区块哈希
-		hashResponse, err := CallRPC(RpcMethodGetBlockHash, []interface{}{height}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取区块哈希失败", "height", height, "error", err)
+		// 先获取区块哈希（使用异步方式）
+		hashAsyncChan := CallRPCAsync(ctx, RpcMethodGetBlockHash, []interface{}{height}, false)
+		hashAsyncResult := <-hashAsyncChan
+
+		if hashAsyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "获取区块哈希失败", "height", height, "error", hashAsyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  hashAsyncResult.Error,
 			}
 			return
 		}
 
-		hash, ok := hashResponse.(string)
+		hash, ok := hashAsyncResult.Result.(string)
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
 			log.ErrorWithContext(ctx, "获取区块哈希响应格式错误", "height", height)
@@ -253,16 +269,20 @@ func FetchBlockHeaderByHeight(ctx context.Context, height int64) <-chan AsyncRes
 			return
 		}
 
-		// 通过哈希获取区块头
-		response, err := CallRPC(RpcMethodGetBlockHeader, []interface{}{hash}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "通过哈希获取区块头失败", "hash", hash, "error", err)
+		// 通过哈希获取区块头（使用异步方式）
+		responseAsyncChan := CallRPCAsync(ctx, RpcMethodGetBlockHeader, []interface{}{hash}, false)
+		responseAsyncResult := <-responseAsyncChan
+
+		if responseAsyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "通过哈希获取区块头失败", "hash", hash, "error", responseAsyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  responseAsyncResult.Error,
 			}
 			return
 		}
+
+		response := responseAsyncResult.Result
 
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
@@ -306,15 +326,20 @@ func FetchBlockHeaderByHash(ctx context.Context, hash string) <-chan AsyncResult
 
 		log.InfoWithContext(ctx, "通过哈希获取区块头", "hash", hash)
 
-		response, err := CallRPC(RpcMethodGetBlockHeader, []interface{}{hash}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "通过哈希获取区块头失败", "hash", hash, "error", err)
+		// 使用异步方式调用RPC
+		asyncChan := CallRPCAsync(ctx, RpcMethodGetBlockHeader, []interface{}{hash}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "通过哈希获取区块头失败", "hash", hash, "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  asyncResult.Error,
 			}
 			return
 		}
+
+		response := asyncResult.Result
 
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
@@ -358,18 +383,20 @@ func FetchNearby10Headers(ctx context.Context) <-chan AsyncResult {
 
 		log.InfoWithContext(ctx, "获取最近10个区块头")
 
-		// 获取当前区块高度
-		infoResponse, err := CallRPC(RpcMethodGetInfo, []interface{}{}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取区块链信息失败", "error", err)
+		// 获取当前区块高度（使用异步方式）
+		infoAsyncChan := CallRPCAsync(ctx, RpcMethodGetInfo, []interface{}{}, false)
+		infoAsyncResult := <-infoAsyncChan
+
+		if infoAsyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "获取区块链信息失败", "error", infoAsyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  infoAsyncResult.Error,
 			}
 			return
 		}
 
-		info, ok := infoResponse.(map[string]interface{})
+		info, ok := infoAsyncResult.Result.(map[string]interface{})
 		if !ok {
 			err := fmt.Errorf("响应格式错误")
 			log.ErrorWithContext(ctx, "获取区块链信息响应格式错误")
@@ -474,16 +501,20 @@ func GetRawTransaction(ctx context.Context, txid string, verbose bool) <-chan As
 			params = append(params, 1)
 		}
 
-		// 调用区块链节点RPC
-		result, err := CallRPC(RpcMethodGetRawTransaction, params, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取交易原始数据失败", "txid", txid, "错误", err)
+		// 调用区块链节点RPC（使用异步方式）
+		asyncChan := CallRPCAsync(ctx, RpcMethodGetRawTransaction, params, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "获取交易原始数据失败", "txid", txid, "错误", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("获取交易原始数据失败: %w", err),
+				Error:  fmt.Errorf("获取交易原始数据失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 检查上下文是否已取消
 		select {
@@ -515,15 +546,21 @@ func GetBlockByHeight(ctx context.Context, height int64) <-chan AsyncResult {
 		defer close(resultChan)
 
 		log.InfoWithContextf(ctx, "开始获取区块信息: height=%d", height)
-		result, err := CallRPC("getblockbyheight", []interface{}{height}, false)
-		if err != nil {
-			log.ErrorWithContextf(ctx, "获取区块信息失败: height=%d, 错误=%v", height, err)
+
+		// 使用异步RPC调用
+		asyncChan := CallRPCAsync(ctx, "getblockbyheight", []interface{}{height}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContextf(ctx, "获取区块信息失败: height=%d, 错误=%v", height, asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("获取区块失败: %w", err),
+				Error:  fmt.Errorf("获取区块失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		resultMap, ok := result.(map[string]interface{})
 		if !ok {
@@ -566,15 +603,20 @@ func FetchChainInfo(ctx context.Context) <-chan AsyncResult {
 
 		log.InfoWithContext(ctx, "获取区块链信息")
 
-		response, err := CallRPC(RpcMethodGetBlockchainInfo, []interface{}{}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取区块链信息失败", "error", err)
+		// 使用异步方式调用RPC
+		asyncChan := CallRPCAsync(ctx, RpcMethodGetBlockchainInfo, []interface{}{}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "获取区块链信息失败", "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  asyncResult.Error,
 			}
 			return
 		}
+
+		response := asyncResult.Result
 
 		responseMap, ok := response.(map[string]interface{})
 		if !ok {
@@ -637,16 +679,20 @@ func DecodeTxHash(ctx context.Context, txid string) <-chan AsyncResult {
 		// 记录开始调用日志
 		log.InfoWithContextf(ctx, "开始查询交易: %s", txid)
 
-		// 调用区块链节点RPC
-		result, err := CallRPC("getrawtransaction", []interface{}{txid, 1}, false)
-		if err != nil {
-			log.ErrorWithContextf(ctx, "查询交易失败: %s, 错误: %v", txid, err)
+		// 调用区块链节点RPC（使用异步方式）
+		asyncChan := CallRPCAsync(ctx, "getrawtransaction", []interface{}{txid, 1}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContextf(ctx, "查询交易失败: %s, 错误: %v", txid, asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("解析交易失败: %w", err),
+				Error:  fmt.Errorf("解析交易失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 将返回结果转换为TransactionResponse结构
 		var tx blockchain.TransactionResponse
@@ -713,16 +759,20 @@ func DecodeTx(ctx context.Context, txid string) <-chan AsyncResult {
 		// 记录开始调用日志
 		log.InfoWithContextf(ctx, "开始查询交易: %s", txid)
 
-		// 调用区块链节点RPC
-		result, err := CallRPC("getrawtransaction", []interface{}{txid, 1}, false)
-		if err != nil {
-			log.ErrorWithContextf(ctx, "查询交易失败: %s, 错误: %v", txid, err)
+		// 调用区块链节点RPC（使用异步方式）
+		asyncChan := CallRPCAsync(ctx, "getrawtransaction", []interface{}{txid, 1}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContextf(ctx, "查询交易失败: %s, 错误: %v", txid, asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("解析交易失败: %w", err),
+				Error:  fmt.Errorf("解析交易失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 将返回结果转换为TransactionResponse结构
 		var tx blockchain.TransactionResponse
@@ -787,16 +837,20 @@ func DecodeRawTransaction(ctx context.Context, txHex string) <-chan AsyncResult 
 		// 记录开始调用日志
 		log.InfoWithContext(ctx, "开始解码原始交易", "txHexLength", len(txHex))
 
-		// 调用区块链节点RPC
-		result, err := CallRPC(RpcMethodDecodeRawTransaction, []interface{}{txHex}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "解码原始交易失败", "错误", err)
+		// 调用区块链节点RPC（使用异步方式）
+		asyncChan := CallRPCAsync(ctx, RpcMethodDecodeRawTransaction, []interface{}{txHex}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "解码原始交易失败", "错误", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("解码原始交易失败: %w", err),
+				Error:  fmt.Errorf("解码原始交易失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 检查上下文是否已取消
 		select {
@@ -829,15 +883,20 @@ func FetchMemPoolTxs(ctx context.Context) <-chan AsyncResult {
 
 		log.InfoWithContext(ctx, "获取内存池交易列表")
 
-		response, err := CallRPC(RpcMethodGetRawMempool, []interface{}{}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "获取内存池交易列表失败", "error", err)
+		// 使用异步方式调用RPC
+		asyncChan := CallRPCAsync(ctx, RpcMethodGetRawMempool, []interface{}{}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "获取内存池交易列表失败", "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  err,
+				Error:  asyncResult.Error,
 			}
 			return
 		}
+
+		response := asyncResult.Result
 
 		// 验证响应数据类型
 		txids, ok := response.([]interface{})
@@ -911,12 +970,16 @@ func GetTxVins(ctx context.Context, txids []string) <-chan AsyncResult {
 		result := make([]interface{}, 0, len(txids))
 
 		for _, txid := range txids {
-			// 1. 获取交易详情
-			txResp, err := CallRPC(RpcMethodGetRawTransaction, []interface{}{txid, 1}, false)
-			if err != nil {
-				log.ErrorWithContext(ctx, "获取交易详情失败", "txid", txid, "错误", err)
+			// 1. 获取交易详情（使用异步方式）
+			txAsyncChan := CallRPCAsync(ctx, RpcMethodGetRawTransaction, []interface{}{txid, 1}, false)
+			txAsyncResult := <-txAsyncChan
+
+			if txAsyncResult.Error != nil {
+				log.ErrorWithContext(ctx, "获取交易详情失败", "txid", txid, "错误", txAsyncResult.Error)
 				continue
 			}
+
+			txResp := txAsyncResult.Result
 
 			txMap, ok := txResp.(map[string]interface{})
 			if !ok {
@@ -963,12 +1026,16 @@ func GetTxVins(ctx context.Context, txids []string) <-chan AsyncResult {
 					continue
 				}
 
-				// 获取输入交易的原始数据
-				vinRawResp, err := CallRPC(RpcMethodGetRawTransaction, []interface{}{vinTxid}, false)
-				if err != nil {
-					log.ErrorWithContext(ctx, "获取输入交易原始数据失败", "vinTxid", vinTxid, "错误", err)
+				// 获取输入交易的原始数据（使用异步方式）
+				vinRawAsyncChan := CallRPCAsync(ctx, RpcMethodGetRawTransaction, []interface{}{vinTxid}, false)
+				vinRawAsyncResult := <-vinRawAsyncChan
+
+				if vinRawAsyncResult.Error != nil {
+					log.ErrorWithContext(ctx, "获取输入交易原始数据失败", "vinTxid", vinTxid, "错误", vinRawAsyncResult.Error)
 					continue
 				}
+
+				vinRawResp := vinRawAsyncResult.Result
 
 				vinRaw, ok := vinRawResp.(string)
 				if !ok {

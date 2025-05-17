@@ -19,16 +19,20 @@ func SendRawTransaction(ctx context.Context, txHex string, allowHighFees bool, b
 		// 记录开始调用日志
 		log.InfoWithContext(ctx, "开始广播原始交易", "txHexLength", len(txHex))
 
-		// 调用RPC
-		result, err := CallRPC("sendrawtransaction", []interface{}{txHex, allowHighFees, bypassLimits}, false)
-		if err != nil {
-			log.ErrorWithContext(ctx, "广播原始交易失败", "error", err)
+		// 使用异步方式调用RPC
+		asyncChan := CallRPCAsync(ctx, "sendrawtransaction", []interface{}{txHex, allowHighFees, bypassLimits}, false)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "广播原始交易失败", "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: nil,
-				Error:  fmt.Errorf("广播原始交易失败: %w", err),
+				Error:  fmt.Errorf("广播原始交易失败: %w", asyncResult.Error),
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 将结果转换为字符串
 		txid, ok := result.(string)
@@ -61,21 +65,25 @@ func SendRawTransactions(ctx context.Context, txList []map[string]interface{}) <
 		// 记录开始调用日志
 		log.InfoWithContext(ctx, "开始批量广播原始交易(完整响应)", "count", len(txList))
 
-		// 调用RPC
-		result, err := CallRPC("sendrawtransactions", []interface{}{txList}, true)
-		if err != nil {
-			log.ErrorWithContext(ctx, "批量广播原始交易失败", "error", err)
+		// 使用异步方式调用RPC
+		asyncChan := CallRPCAsync(ctx, "sendrawtransactions", []interface{}{txList}, true)
+		asyncResult := <-asyncChan
+
+		if asyncResult.Error != nil {
+			log.ErrorWithContext(ctx, "批量广播原始交易失败", "error", asyncResult.Error)
 			resultChan <- AsyncResult{
 				Result: &broadcast.TxsBroadcastResponse{
 					Error: &broadcast.BroadcastError{
 						Code:    -1,
-						Message: err.Error(),
+						Message: asyncResult.Error.Error(),
 					},
 				},
 				Error: nil,
 			}
 			return
 		}
+
+		result := asyncResult.Result
 
 		// 解析完整响应
 		rpcResp, ok := result.(RPCResponse)

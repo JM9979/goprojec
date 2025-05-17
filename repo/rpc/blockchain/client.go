@@ -41,6 +41,9 @@ type AsyncResult struct {
 	Error  error
 }
 
+// 全局连接池
+var globalConnPool *ConnPool
+
 // Init 初始化区块链RPC客户端
 func Init() error {
 	log.Info("初始化区块链RPC客户端...")
@@ -55,18 +58,69 @@ func Init() error {
 		return fmt.Errorf("区块链RPC URL未配置")
 	}
 
+	// 初始化连接池
+	pool, err := NewConnPool(nil)
+	if err != nil {
+		return fmt.Errorf("初始化区块链节点连接池失败: %w", err)
+	}
+	globalConnPool = pool
+
 	log.Infof("区块链RPC客户端初始化完成，服务器: %s", config.URL)
 	return nil
 }
 
-// CallRPC 同步调用节点RPC
-func CallRPC(method string, params interface{}, fullResponse bool) (interface{}, error) {
-	// 获取RPC配置
-	config := config.GetConfig().GetTBCNodeConfig()
-	if config == nil {
-		return nil, fmt.Errorf("RPC配置未初始化")
+// CallRPC 使用上下文同步调用节点RPC
+func CallRPC(ctx context.Context, method string, params interface{}, fullResponse bool) (interface{}, error) {
+	// 确保连接池已初始化
+	if globalConnPool == nil {
+		// 获取RPC配置
+		config := config.GetConfig().GetTBCNodeConfig()
+		if config == nil {
+			return nil, fmt.Errorf("RPC配置未初始化")
+		}
+
+		// 创建HTTP请求
+		req, err := createRPCRequest(config, method, params)
+		if err != nil {
+			return nil, err
+		}
+
+		// 创建带超时的客户端
+		client := &http.Client{
+			Timeout: time.Duration(config.Timeout) * time.Second,
+		}
+
+		// 记录请求日志
+		log.Debugf("发送区块链RPC请求: method=%s, params=%v", method, params)
+
+		// 发送请求
+		resp, err := client.Do(req.WithContext(ctx))
+		if err != nil {
+			return nil, fmt.Errorf("发送RPC请求失败: %w", err)
+		}
+		defer resp.Body.Close()
+
+		return processRPCResponse(resp, fullResponse)
 	}
 
+	// 使用连接池处理请求
+	result, err := globalConnPool.Call(ctx, method, params)
+	if err != nil {
+		return nil, err
+	}
+
+	if fullResponse {
+		return RPCResponse{
+			JSONRPC: "1.0",
+			ID:      "blockchain_client",
+			Result:  result,
+		}, nil
+	}
+	return result, nil
+}
+
+// createRPCRequest 创建RPC请求
+func createRPCRequest(config *config.TBCNodeConfig, method string, params interface{}) (*http.Request, error) {
 	// 创建RPC请求
 	rpcReq := RPCRequest{
 		JSONRPC: "1.0",
@@ -95,21 +149,11 @@ func CallRPC(method string, params interface{}, fullResponse bool) (interface{},
 		req.SetBasicAuth(config.User, config.Password)
 	}
 
-	// 创建带超时的客户端
-	client := &http.Client{
-		Timeout: time.Duration(config.Timeout) * time.Second,
-	}
+	return req, nil
+}
 
-	// 记录请求日志
-	log.Debugf("发送区块链RPC请求: method=%s, params=%v", method, params)
-
-	// 发送请求
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("发送RPC请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
+// processRPCResponse 处理RPC响应
+func processRPCResponse(resp *http.Response, fullResponse bool) (interface{}, error) {
 	// 读取响应
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -156,7 +200,7 @@ func CallRPCAsync(ctx context.Context, method string, params interface{}, fullRe
 		}
 
 		// 调用同步版本的RPC方法
-		result, err := CallRPC(method, params, fullResponse)
+		result, err := CallRPC(ctx, method, params, fullResponse)
 
 		// 将结果发送到通道
 		resultChan <- AsyncResult{
@@ -166,4 +210,14 @@ func CallRPCAsync(ctx context.Context, method string, params interface{}, fullRe
 	}()
 
 	return resultChan
+}
+
+// Close 关闭客户端和连接池
+func Close() error {
+	if globalConnPool != nil {
+		err := globalConnPool.Close()
+		globalConnPool = nil
+		return err
+	}
+	return nil
 }

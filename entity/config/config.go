@@ -48,10 +48,12 @@ type DBConfig struct {
 
 // TBCNodeConfig RPC客户端配置
 type TBCNodeConfig struct {
-	URL      string `yaml:"url"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-	Timeout  int    `yaml:"timeout"`
+	URL          string `yaml:"url"`
+	User         string `yaml:"user"`
+	Password     string `yaml:"password"`
+	Timeout      int    `yaml:"timeout"`
+	MaxIdleConns int    `yaml:"maxidleconns"`
+	MaxOpenConns int    `yaml:"maxopenconns"`
 }
 
 // ElectrumXConfig ElectrumX RPC客户端配置
