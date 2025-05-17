@@ -3,7 +3,9 @@ package ft
 import (
 	"context"
 	"fmt"
+	"sync"
 
+	"ginproject/entity/dbtable"
 	"ginproject/entity/ft"
 	"ginproject/entity/utility"
 	"ginproject/middleware/log"
@@ -33,29 +35,65 @@ func (l *FtLogic) GetFtHolderRank(ctx context.Context, req *ft.FtHolderRankReque
 	log.InfoWithContextf(ctx, "查询代币持有者排名, 合约ID: %s, 页码: %d, 每页记录数: %d",
 		req.ContractId, page, size)
 
+	// 使用协程并发执行三个数据库查询操作
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	// 用于存储查询结果和错误
+	var token *dbtable.FtTokens
+	var tokenErr error
+
+	var holdersCount int64
+	var holdersCountErr error
+
+	var balances []*dbtable.FtBalance
+	var balancesErr error
+
 	// 查询代币基本信息
-	token, err := l.ftTokensDAO.GetFtTokenById(req.ContractId)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取代币信息失败: %v", err)
-		return nil, fmt.Errorf("获取代币信息失败: %v", err)
-	}
+	go func() {
+		defer wg.Done()
+		token, tokenErr = l.ftTokensDAO.GetFtTokenById(req.ContractId)
+		if tokenErr != nil {
+			log.ErrorWithContextf(ctx, "获取代币信息失败: %v", tokenErr)
+		}
+	}()
 
 	// 查询代币持有者数量
-	holdersCount, err := l.ftBalanceDAO.GetHoldersCountByContractId(req.ContractId)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取代币持有者数量失败: %v", err)
-		return nil, fmt.Errorf("获取代币持有者数量失败: %v", err)
+	go func() {
+		defer wg.Done()
+		holdersCount, holdersCountErr = l.ftBalanceDAO.GetHoldersCountByContractId(req.ContractId)
+		if holdersCountErr != nil {
+			log.ErrorWithContextf(ctx, "获取代币持有者数量失败: %v", holdersCountErr)
+		}
+	}()
+
+	// 查询持有者排名数据
+	go func() {
+		defer wg.Done()
+		balances, balancesErr = l.ftBalanceDAO.GetFtBalanceRankByContractId(ctx, req.ContractId, page, size)
+		if balancesErr != nil {
+			log.ErrorWithContextf(ctx, "获取代币持有者排名失败: %v", balancesErr)
+		}
+	}()
+
+	// 等待所有协程完成
+	wg.Wait()
+
+	// 检查错误
+	if tokenErr != nil {
+		return nil, fmt.Errorf("获取代币信息失败: %v", tokenErr)
+	}
+
+	if holdersCountErr != nil {
+		return nil, fmt.Errorf("获取代币持有者数量失败: %v", holdersCountErr)
+	}
+
+	if balancesErr != nil {
+		return nil, fmt.Errorf("获取代币持有者排名失败: %v", balancesErr)
 	}
 
 	// 查询代币总供应量
 	totalSupply := token.FtSupply
-
-	// 查询持有者排名数据
-	balances, err := l.ftBalanceDAO.GetFtBalanceRankByContractId(ctx, req.ContractId, page, size)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取代币持有者排名失败: %v", err)
-		return nil, fmt.Errorf("获取代币持有者排名失败: %v", err)
-	}
 
 	// 构造响应数据
 	holderRankList := make([]ft.HolderRankInfo, 0, len(balances))
