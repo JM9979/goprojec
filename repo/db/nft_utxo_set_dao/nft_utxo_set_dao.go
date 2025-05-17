@@ -2,8 +2,11 @@ package nft_utxo_set_dao
 
 import (
 	"context"
+	"fmt"
 	"ginproject/entity/dbtable"
+	"ginproject/middleware/log"
 	"ginproject/repo/db"
+	"sync"
 
 	"gorm.io/gorm"
 )
@@ -130,40 +133,130 @@ func (dao *NftUtxoSetDAO) GetPoolListByFtContractId(ctx context.Context, ftContr
 	return results, err
 }
 
-// GetAllPoolsWithPagination 分页获取所有流动池列表
-func (dao *NftUtxoSetDAO) GetAllPoolsWithPagination(ctx context.Context, page, size int) ([]struct {
-	NftContractId   string `gorm:"column:nft_contract_id"`
-	CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
-	TokenContractId string `gorm:"column:nft_icon"`
-}, int64, error) {
-	var results []struct {
+// GetAllPoolsWithPagination 异步分页获取所有流动池列表，使用并行查询优化性能
+func (dao *NftUtxoSetDAO) GetAllPoolsWithPagination(ctx context.Context, page, size int) (<-chan struct {
+	Results []struct {
 		NftContractId   string `gorm:"column:nft_contract_id"`
 		CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
 		TokenContractId string `gorm:"column:nft_icon"`
 	}
+	TotalCount int64
+	Error      error
+}, error) {
+	// 创建一个结果通道
+	resultChan := make(chan struct {
+		Results []struct {
+			NftContractId   string `gorm:"column:nft_contract_id"`
+			CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+			TokenContractId string `gorm:"column:nft_icon"`
+		}
+		TotalCount int64
+		Error      error
+	}, 1) // 缓冲为1，避免发送方阻塞
 
-	// 计算总数量
-	var totalCount int64
-	countErr := dao.db.WithContext(ctx).
-		Table("TBC20721.nft_utxo_set").
-		Where("nft_holder_address = ?", "LP").
-		Count(&totalCount).Error
+	// 启动异步协程执行并行查询
+	go func() {
+		defer close(resultChan) // 确保通道在函数结束时关闭
 
-	if countErr != nil {
-		return nil, 0, countErr
-	}
+		// 使用日志记录异步查询开始
+		log.InfoWithContextf(ctx, "开始并行异步查询流动池数据: 页码=%d, 每页大小=%d", page, size)
 
-	// 分页查询所有流动池
-	offset := page * size // page从0开始
-	err := dao.db.WithContext(ctx).
-		Table("TBC20721.nft_utxo_set").
-		Select("nft_contract_id, nft_create_timestamp, nft_icon").
-		Where("nft_holder_address = ?", "LP").
-		Offset(offset).
-		Limit(size).
-		Find(&results).Error
+		// 查询结果结构
+		var result struct {
+			Results []struct {
+				NftContractId   string `gorm:"column:nft_contract_id"`
+				CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+				TokenContractId string `gorm:"column:nft_icon"`
+			}
+			TotalCount int64
+			Error      error
+		}
 
-	return results, totalCount, err
+		// 创建两个通道，分别用于接收总数查询和数据查询的结果
+		type countResult struct {
+			Count int64
+			Err   error
+		}
+		type dataResult struct {
+			Data []struct {
+				NftContractId   string `gorm:"column:nft_contract_id"`
+				CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+				TokenContractId string `gorm:"column:nft_icon"`
+			}
+			Err error
+		}
+
+		countChan := make(chan countResult, 1)
+		dataChan := make(chan dataResult, 1)
+
+		// 启动协程1：查询总数
+		go func() {
+			var totalCount int64
+			countErr := dao.db.WithContext(ctx).
+				Table("TBC20721.nft_utxo_set").
+				Where("nft_holder_address = ?", "LP").
+				Count(&totalCount).Error
+
+			countChan <- countResult{
+				Count: totalCount,
+				Err:   countErr,
+			}
+		}()
+
+		// 启动协程2：查询分页数据
+		go func() {
+			var poolData []struct {
+				NftContractId   string `gorm:"column:nft_contract_id"`
+				CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+				TokenContractId string `gorm:"column:nft_icon"`
+			}
+
+			// 分页查询所有流动池
+			offset := page * size // page从0开始
+			err := dao.db.WithContext(ctx).
+				Table("TBC20721.nft_utxo_set").
+				Select("nft_contract_id, nft_create_timestamp, nft_icon").
+				Where("nft_holder_address = ?", "LP").
+				Offset(offset).
+				Limit(size).
+				Find(&poolData).Error
+
+			dataChan <- dataResult{
+				Data: poolData,
+				Err:  err,
+			}
+		}()
+
+		// 等待两个查询都完成
+		cResult := <-countChan
+		dResult := <-dataChan
+
+		// 检查总数查询是否有错误
+		if cResult.Err != nil {
+			log.ErrorWithContextf(ctx, "并行异步查询流动池总数失败: %v", cResult.Err)
+			result.Error = cResult.Err
+			resultChan <- result
+			return
+		}
+
+		// 检查数据查询是否有错误
+		if dResult.Err != nil {
+			log.ErrorWithContextf(ctx, "并行异步查询流动池数据失败: %v", dResult.Err)
+			result.Error = dResult.Err
+			resultChan <- result
+			return
+		}
+
+		// 合并结果
+		result.TotalCount = cResult.Count
+		result.Results = dResult.Data
+
+		log.InfoWithContextf(ctx, "并行异步查询流动池数据成功: 获取到%d条记录, 总数=%d",
+			len(result.Results), result.TotalCount)
+		resultChan <- result
+	}()
+
+	return resultChan, nil
 }
 
 // GetNftsByHolderWithPagination 根据持有者脚本哈希分页获取NFT列表
@@ -266,4 +359,127 @@ func (dao *NftUtxoSetDAO) GetNftsByCollectionAndIndex(ctx context.Context, colle
 		Where("collection_id = ? AND collection_index = ?", collectionId, collectionIndex).
 		Find(&nfts).Error
 	return nfts, err
+}
+
+// GetAllPoolsWithPaginationParallel 使用WaitGroup实现并行查询的异步分页获取
+func (dao *NftUtxoSetDAO) GetAllPoolsWithPaginationParallel(ctx context.Context, page, size int) (<-chan struct {
+	Results []struct {
+		NftContractId   string `gorm:"column:nft_contract_id"`
+		CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+		TokenContractId string `gorm:"column:nft_icon"`
+	}
+	TotalCount int64
+	Error      error
+}, error) {
+	// 创建结果通道
+	resultChan := make(chan struct {
+		Results []struct {
+			NftContractId   string `gorm:"column:nft_contract_id"`
+			CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+			TokenContractId string `gorm:"column:nft_icon"`
+		}
+		TotalCount int64
+		Error      error
+	}, 1)
+
+	// 启动主协程
+	go func() {
+		defer close(resultChan)
+
+		log.InfoWithContextf(ctx, "开始使用WaitGroup并行查询流动池数据: 页码=%d, 每页大小=%d", page, size)
+
+		// 准备结果结构
+		var result struct {
+			Results []struct {
+				NftContractId   string `gorm:"column:nft_contract_id"`
+				CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+				TokenContractId string `gorm:"column:nft_icon"`
+			}
+			TotalCount int64
+			Error      error
+		}
+
+		// 使用WaitGroup来等待两个查询都完成
+		var wg sync.WaitGroup
+		wg.Add(2) // 两个查询任务
+
+		// 使用互斥锁保护共享的错误变量
+		var mu sync.Mutex
+		var firstError error
+
+		// 协程1：查询总数
+		go func() {
+			defer wg.Done()
+
+			var totalCount int64
+			err := dao.db.WithContext(ctx).
+				Table("TBC20721.nft_utxo_set").
+				Where("nft_holder_address = ?", "LP").
+				Count(&totalCount).Error
+
+			if err != nil {
+				mu.Lock()
+				if firstError == nil {
+					firstError = fmt.Errorf("查询总数失败: %w", err)
+				}
+				mu.Unlock()
+				log.ErrorWithContextf(ctx, "WaitGroup并行查询总数失败: %v", err)
+				return
+			}
+
+			mu.Lock()
+			result.TotalCount = totalCount
+			mu.Unlock()
+		}()
+
+		// 协程2：查询数据
+		go func() {
+			defer wg.Done()
+
+			offset := page * size
+			var poolData []struct {
+				NftContractId   string `gorm:"column:nft_contract_id"`
+				CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
+				TokenContractId string `gorm:"column:nft_icon"`
+			}
+
+			err := dao.db.WithContext(ctx).
+				Table("TBC20721.nft_utxo_set").
+				Select("nft_contract_id, nft_create_timestamp, nft_icon").
+				Where("nft_holder_address = ?", "LP").
+				Offset(offset).
+				Limit(size).
+				Find(&poolData).Error
+
+			if err != nil {
+				mu.Lock()
+				if firstError == nil {
+					firstError = fmt.Errorf("查询数据失败: %w", err)
+				}
+				mu.Unlock()
+				log.ErrorWithContextf(ctx, "WaitGroup并行查询数据失败: %v", err)
+				return
+			}
+
+			mu.Lock()
+			result.Results = poolData
+			mu.Unlock()
+		}()
+
+		// 等待所有查询完成
+		wg.Wait()
+
+		// 检查是否有错误
+		if firstError != nil {
+			result.Error = firstError
+			resultChan <- result
+			return
+		}
+
+		log.InfoWithContextf(ctx, "WaitGroup并行查询流动池数据成功: 获取到%d条记录, 总数=%d",
+			len(result.Results), result.TotalCount)
+		resultChan <- result
+	}()
+
+	return resultChan, nil
 }
