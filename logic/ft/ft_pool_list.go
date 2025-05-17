@@ -3,6 +3,7 @@ package ft
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"ginproject/entity/ft"
@@ -102,7 +103,7 @@ func (l *FtLogic) GetAllPoolList(ctx context.Context, req *ft.TBC20PoolPageReque
 
 	// 初始化响应对象
 	response := &ft.TBC20PoolPageResponse{
-		PoolList:       make([]ft.TBC20PoolInfo, 0, len(result.Results)),
+		PoolList:       make([]ft.TBC20PoolInfo, len(result.Results)),
 		TotalPoolCount: result.TotalCount,
 	}
 
@@ -112,333 +113,106 @@ func (l *FtLogic) GetAllPoolList(ctx context.Context, req *ft.TBC20PoolPageReque
 		return response, nil
 	}
 
-	// 处理每个流动池信息
+	// 收集所有需要查询的代币IDs
+	tokenIds := make([]string, 0, len(result.Results))
+	tokenIdMap := make(map[string]bool)
+
 	for _, pool := range result.Results {
-		// 初始化代币B的名称
-		var tokenPairBName string
-
-		// 只有当TokenContractId不为空时才查询代币信息
-		if pool.TokenContractId != "" {
-			// 获取代币B的信息
-			tokenInfo, err := l.ftTokensDAO.GetFtTokenById(pool.TokenContractId)
-			if err != nil {
-				log.WarnWithContextf(ctx, "获取代币信息失败: 代币ID=%s, 错误=%v",
-					pool.TokenContractId, err)
-				// 出错时设置为空字符串，与Python代码行为一致
-				tokenPairBName = ""
-			} else if tokenInfo != nil {
-				// 如果获取到代币信息，使用代币名称
-				tokenPairBName = tokenInfo.FtName
-			}
+		if pool.TokenContractId != "" && !tokenIdMap[pool.TokenContractId] {
+			tokenIds = append(tokenIds, pool.TokenContractId)
+			tokenIdMap[pool.TokenContractId] = true
 		}
-
-		// 构建池信息
-		poolInfo := ft.TBC20PoolInfo{
-			PoolId:              pool.NftContractId,
-			TokenPairAId:        "TBC",
-			TokenPairAName:      "TBC",
-			TokenPairBId:        pool.TokenContractId,
-			TokenPairBName:      tokenPairBName,
-			PoolCreateTimestamp: pool.CreateTimestamp,
-		}
-
-		// 添加到响应列表
-		response.PoolList = append(response.PoolList, poolInfo)
 	}
 
-	log.InfoWithContextf(ctx, "处理流动池列表完成: 总数=%d, 返回数量=%d",
-		response.TotalPoolCount, len(response.PoolList))
-
-	return response, nil
-}
-
-// GetAllPoolListWithTimeout 获取所有交易池列表（带超时处理）
-func (l *FtLogic) GetAllPoolListWithTimeout(ctx context.Context, req *ft.TBC20PoolPageRequest, timeout time.Duration) (*ft.TBC20PoolPageResponse, error) {
-	// 使用entity层的验证逻辑
-	if err := req.Validate(); err != nil {
-		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
-		return nil, fmt.Errorf("参数验证失败: %w", err)
+	// 使用并发方式批量查询代币信息
+	type tokenInfoResult struct {
+		TokenId   string
+		TokenName string
+		Error     error
 	}
 
-	// 创建带超时的上下文
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	var wg sync.WaitGroup
+	tokenInfoChan := make(chan tokenInfoResult, len(tokenIds))
+	tokenNameCache := make(map[string]string)
+
+	// 设置代币查询超时上下文
+	tokenCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 
-	// 记录请求开始日志
-	log.InfoWithContextf(ctx, "开始获取所有流动池列表（超时=%s）: 页码=%d, 页大小=%d",
-		timeout.String(), req.Page, req.Size)
+	// 启动并发查询代币信息
+	for _, tokenId := range tokenIds {
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
 
-	// 使用异步查询方法获取流动池列表
-	resultChan, err := l.ftPoolNftDAO.GetAllPoolsWithPagination(timeoutCtx, req.Page, req.Size)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "启动异步查询流动池列表失败: %v", err)
-		return nil, fmt.Errorf("启动异步查询流动池列表失败: %w", err)
-	}
-
-	// 等待异步查询结果，使用select处理可能的超时情况
-	log.InfoWithContextf(ctx, "等待异步查询结果，最多等待%s...", timeout.String())
-
-	var result struct {
-		Results []struct {
-			NftContractId   string `gorm:"column:nft_contract_id"`
-			CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
-			TokenContractId string `gorm:"column:nft_icon"`
-		}
-		TotalCount int64
-		Error      error
-	}
-
-	select {
-	case res, ok := <-resultChan:
-		if !ok {
-			log.ErrorWithContextf(ctx, "异步查询通道已关闭")
-			return nil, fmt.Errorf("异步查询通道已关闭")
-		}
-		result = res
-	case <-timeoutCtx.Done():
-		log.ErrorWithContextf(ctx, "异步查询流动池列表超时: %v", timeoutCtx.Err())
-		return nil, fmt.Errorf("查询流动池列表超时: %w", timeoutCtx.Err())
-	}
-
-	// 检查查询是否成功
-	if result.Error != nil {
-		log.ErrorWithContextf(ctx, "异步查询流动池列表失败: %v", result.Error)
-		return nil, fmt.Errorf("异步查询流动池列表失败: %w", result.Error)
-	}
-
-	// 初始化响应对象
-	response := &ft.TBC20PoolPageResponse{
-		PoolList:       make([]ft.TBC20PoolInfo, 0, len(result.Results)),
-		TotalPoolCount: result.TotalCount,
-	}
-
-	// 如果没有找到任何池，返回空列表
-	if len(result.Results) == 0 {
-		log.InfoWithContextf(ctx, "未找到流动池信息，返回空列表")
-		return response, nil
-	}
-
-	// 处理每个流动池信息
-	for _, pool := range result.Results {
-		// 初始化代币B的名称
-		var tokenPairBName string
-
-		// 只有当TokenContractId不为空时才查询代币信息
-		if pool.TokenContractId != "" {
-			// 获取代币B的信息
-			tokenInfo, err := l.ftTokensDAO.GetFtTokenById(pool.TokenContractId)
-			if err != nil {
-				log.WarnWithContextf(ctx, "获取代币信息失败: 代币ID=%s, 错误=%v",
-					pool.TokenContractId, err)
-				// 出错时设置为空字符串，与Python代码行为一致
-				tokenPairBName = ""
-			} else if tokenInfo != nil {
-				// 如果获取到代币信息，使用代币名称
-				tokenPairBName = tokenInfo.FtName
+			select {
+			case <-tokenCtx.Done():
+				// 上下文已取消
+				tokenInfoChan <- tokenInfoResult{
+					TokenId:   id,
+					TokenName: "未知",
+					Error:     tokenCtx.Err(),
+				}
+				log.WarnWithContextf(ctx, "代币信息查询超时: 代币ID=%s", id)
+			default:
+				// 查询代币信息
+				tokenInfo, err := l.ftTokensDAO.GetFtTokenById(id)
+				if err != nil {
+					tokenInfoChan <- tokenInfoResult{
+						TokenId:   id,
+						TokenName: "未知",
+						Error:     err,
+					}
+					log.WarnWithContextf(ctx, "获取代币信息失败: 代币ID=%s, 错误=%v", id, err)
+				} else {
+					name := "未知"
+					if tokenInfo != nil {
+						name = tokenInfo.FtName
+					}
+					tokenInfoChan <- tokenInfoResult{
+						TokenId:   id,
+						TokenName: name,
+						Error:     nil,
+					}
+				}
 			}
+		}(tokenId)
+	}
+
+	// 使用另一个goroutine等待所有查询完成并关闭通道
+	go func() {
+		wg.Wait()
+		close(tokenInfoChan)
+	}()
+
+	// 收集代币查询结果
+	for result := range tokenInfoChan {
+		if result.Error == nil {
+			tokenNameCache[result.TokenId] = result.TokenName
+		} else {
+			log.WarnWithContextf(ctx, "代币[%s]信息查询失败: %v", result.TokenId, result.Error)
+			tokenNameCache[result.TokenId] = "未知"
+		}
+	}
+
+	// 组装池信息
+	for i, pool := range result.Results {
+		tokenName := "未知"
+		if name, ok := tokenNameCache[pool.TokenContractId]; ok {
+			tokenName = name
 		}
 
-		// 构建池信息
-		poolInfo := ft.TBC20PoolInfo{
+		response.PoolList[i] = ft.TBC20PoolInfo{
 			PoolId:              pool.NftContractId,
 			TokenPairAId:        "TBC",
 			TokenPairAName:      "TBC",
 			TokenPairBId:        pool.TokenContractId,
-			TokenPairBName:      tokenPairBName,
+			TokenPairBName:      tokenName,
 			PoolCreateTimestamp: pool.CreateTimestamp,
 		}
-
-		// 添加到响应列表
-		response.PoolList = append(response.PoolList, poolInfo)
 	}
 
-	log.InfoWithContextf(ctx, "处理流动池列表完成: 总数=%d, 返回数量=%d",
-		response.TotalPoolCount, len(response.PoolList))
-
-	return response, nil
-}
-
-// GetAllPoolListParallel 使用WaitGroup并行优化的流动池查询
-func (l *FtLogic) GetAllPoolListParallel(ctx context.Context, req *ft.TBC20PoolPageRequest) (*ft.TBC20PoolPageResponse, error) {
-	// 使用entity层的验证逻辑
-	if err := req.Validate(); err != nil {
-		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
-		return nil, fmt.Errorf("参数验证失败: %w", err)
-	}
-
-	// 记录请求开始日志
-	log.InfoWithContextf(ctx, "开始WaitGroup并行查询流动池列表: 页码=%d, 页大小=%d", req.Page, req.Size)
-
-	// 使用WaitGroup并行优化的查询方法
-	resultChan, err := l.ftPoolNftDAO.GetAllPoolsWithPaginationParallel(ctx, req.Page, req.Size)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "启动WaitGroup并行查询失败: %v", err)
-		return nil, fmt.Errorf("启动WaitGroup并行查询失败: %w", err)
-	}
-
-	// 等待异步查询结果
-	log.InfoWithContextf(ctx, "等待WaitGroup并行查询结果...")
-	result := <-resultChan
-
-	// 检查查询是否成功
-	if result.Error != nil {
-		log.ErrorWithContextf(ctx, "WaitGroup并行查询失败: %v", result.Error)
-		return nil, fmt.Errorf("WaitGroup并行查询失败: %w", result.Error)
-	}
-
-	// 初始化响应对象
-	response := &ft.TBC20PoolPageResponse{
-		PoolList:       make([]ft.TBC20PoolInfo, 0, len(result.Results)),
-		TotalPoolCount: result.TotalCount,
-	}
-
-	// 如果没有找到任何池，返回空列表
-	if len(result.Results) == 0 {
-		log.InfoWithContextf(ctx, "未找到流动池信息，返回空列表")
-		return response, nil
-	}
-
-	// 处理每个流动池信息
-	for _, pool := range result.Results {
-		// 初始化代币B的名称
-		var tokenPairBName string
-
-		// 只有当TokenContractId不为空时才查询代币信息
-		if pool.TokenContractId != "" {
-			// 获取代币B的信息
-			tokenInfo, err := l.ftTokensDAO.GetFtTokenById(pool.TokenContractId)
-			if err != nil {
-				log.WarnWithContextf(ctx, "获取代币信息失败: 代币ID=%s, 错误=%v",
-					pool.TokenContractId, err)
-				// 出错时设置为空字符串，与Python代码行为一致
-				tokenPairBName = ""
-			} else if tokenInfo != nil {
-				// 如果获取到代币信息，使用代币名称
-				tokenPairBName = tokenInfo.FtName
-			}
-		}
-
-		// 构建池信息
-		poolInfo := ft.TBC20PoolInfo{
-			PoolId:              pool.NftContractId,
-			TokenPairAId:        "TBC",
-			TokenPairAName:      "TBC",
-			TokenPairBId:        pool.TokenContractId,
-			TokenPairBName:      tokenPairBName,
-			PoolCreateTimestamp: pool.CreateTimestamp,
-		}
-
-		// 添加到响应列表
-		response.PoolList = append(response.PoolList, poolInfo)
-	}
-
-	log.InfoWithContextf(ctx, "WaitGroup并行查询完成: 总数=%d, 返回数量=%d",
-		response.TotalPoolCount, len(response.PoolList))
-
-	return response, nil
-}
-
-// GetAllPoolListParallelWithTimeout 使用WaitGroup并行优化，带超时的流动池查询
-func (l *FtLogic) GetAllPoolListParallelWithTimeout(ctx context.Context, req *ft.TBC20PoolPageRequest, timeout time.Duration) (*ft.TBC20PoolPageResponse, error) {
-	// 使用entity层的验证逻辑
-	if err := req.Validate(); err != nil {
-		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
-		return nil, fmt.Errorf("参数验证失败: %w", err)
-	}
-
-	// 创建带超时的上下文
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	// 记录请求开始日志
-	log.InfoWithContextf(ctx, "开始WaitGroup并行查询流动池列表（超时=%s）: 页码=%d, 页大小=%d",
-		timeout.String(), req.Page, req.Size)
-
-	// 使用WaitGroup并行优化的查询方法
-	resultChan, err := l.ftPoolNftDAO.GetAllPoolsWithPaginationParallel(timeoutCtx, req.Page, req.Size)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "启动WaitGroup并行查询失败: %v", err)
-		return nil, fmt.Errorf("启动WaitGroup并行查询失败: %w", err)
-	}
-
-	// 等待异步查询结果，使用select处理可能的超时情况
-	log.InfoWithContextf(ctx, "等待WaitGroup并行查询结果，最多等待%s...", timeout.String())
-
-	var result struct {
-		Results []struct {
-			NftContractId   string `gorm:"column:nft_contract_id"`
-			CreateTimestamp int64  `gorm:"column:nft_create_timestamp"`
-			TokenContractId string `gorm:"column:nft_icon"`
-		}
-		TotalCount int64
-		Error      error
-	}
-
-	select {
-	case res, ok := <-resultChan:
-		if !ok {
-			log.ErrorWithContextf(ctx, "WaitGroup并行查询通道已关闭")
-			return nil, fmt.Errorf("WaitGroup并行查询通道已关闭")
-		}
-		result = res
-	case <-timeoutCtx.Done():
-		log.ErrorWithContextf(ctx, "WaitGroup并行查询超时: %v", timeoutCtx.Err())
-		return nil, fmt.Errorf("WaitGroup并行查询超时: %w", timeoutCtx.Err())
-	}
-
-	// 检查查询是否成功
-	if result.Error != nil {
-		log.ErrorWithContextf(ctx, "WaitGroup并行查询失败: %v", result.Error)
-		return nil, fmt.Errorf("WaitGroup并行查询失败: %w", result.Error)
-	}
-
-	// 初始化响应对象
-	response := &ft.TBC20PoolPageResponse{
-		PoolList:       make([]ft.TBC20PoolInfo, 0, len(result.Results)),
-		TotalPoolCount: result.TotalCount,
-	}
-
-	// 如果没有找到任何池，返回空列表
-	if len(result.Results) == 0 {
-		log.InfoWithContextf(ctx, "未找到流动池信息，返回空列表")
-		return response, nil
-	}
-
-	// 处理每个流动池信息
-	for _, pool := range result.Results {
-		// 初始化代币B的名称
-		var tokenPairBName string
-
-		// 只有当TokenContractId不为空时才查询代币信息
-		if pool.TokenContractId != "" {
-			// 获取代币B的信息
-			tokenInfo, err := l.ftTokensDAO.GetFtTokenById(pool.TokenContractId)
-			if err != nil {
-				log.WarnWithContextf(ctx, "获取代币信息失败: 代币ID=%s, 错误=%v",
-					pool.TokenContractId, err)
-				// 出错时设置为空字符串，与Python代码行为一致
-				tokenPairBName = ""
-			} else if tokenInfo != nil {
-				// 如果获取到代币信息，使用代币名称
-				tokenPairBName = tokenInfo.FtName
-			}
-		}
-
-		// 构建池信息
-		poolInfo := ft.TBC20PoolInfo{
-			PoolId:              pool.NftContractId,
-			TokenPairAId:        "TBC",
-			TokenPairAName:      "TBC",
-			TokenPairBId:        pool.TokenContractId,
-			TokenPairBName:      tokenPairBName,
-			PoolCreateTimestamp: pool.CreateTimestamp,
-		}
-
-		// 添加到响应列表
-		response.PoolList = append(response.PoolList, poolInfo)
-	}
-
-	log.InfoWithContextf(ctx, "WaitGroup并行查询完成: 总数=%d, 返回数量=%d",
+	log.InfoWithContextf(ctx, "获取所有流动池列表成功: 总数=%d, 本页获取数=%d",
 		response.TotalPoolCount, len(response.PoolList))
 
 	return response, nil

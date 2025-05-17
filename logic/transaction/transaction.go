@@ -2,13 +2,14 @@ package transaction
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"ginproject/entity/transaction"
 	"ginproject/middleware/log"
 	"ginproject/repo/rpc/blockchain"
+
+	"github.com/go-viper/mapstructure/v2"
 )
 
 // BroadcastTxRaw 广播单个原始交易的业务逻辑
@@ -71,17 +72,17 @@ func DecodeRawTx(ctx context.Context, req *transaction.TxDecodeRawRequest) (*tra
 		return nil, http.StatusInternalServerError, result.Error
 	}
 
-	// 转换结果
-	jsonData, err := json.Marshal(result.Result)
-	if err != nil {
-		log.ErrorWithContext(ctx, "解码交易结果序列化失败", "error", err)
-		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果序列化失败: %w", err)
+	// 尝试直接类型转换
+	if decodedTx, ok := result.Result.(transaction.TxDecodeResponse); ok {
+		log.InfoWithContext(ctx, "直接类型转换成功", "txid", decodedTx.TxID)
+		return &decodedTx, http.StatusOK, nil
 	}
 
+	// 如果直接转换失败，使用 mapstructure 进行高效转换
 	var resp transaction.TxDecodeResponse
-	if err := json.Unmarshal(jsonData, &resp); err != nil {
-		log.ErrorWithContext(ctx, "解码交易结果反序列化失败", "error", err)
-		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果反序列化失败: %w", err)
+	if err := mapstructure.Decode(result.Result, &resp); err != nil {
+		log.ErrorWithContext(ctx, "解码交易结果映射失败", "error", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果映射失败: %w", err)
 	}
 
 	// 返回结果
@@ -143,17 +144,17 @@ func DecodeTxByHash(ctx context.Context, txid string) (*transaction.TxDecodeResp
 		return nil, http.StatusInternalServerError, result.Error
 	}
 
-	// 转换结果
-	jsonData, err := json.Marshal(result.Result)
-	if err != nil {
-		log.ErrorWithContext(ctx, "解码交易结果序列化失败", "error", err)
-		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果序列化失败: %w", err)
+	// 尝试直接类型转换
+	if decodedTx, ok := result.Result.(transaction.TxDecodeResponse); ok {
+		log.InfoWithContext(ctx, "直接类型转换成功", "txid", decodedTx.TxID)
+		return &decodedTx, http.StatusOK, nil
 	}
 
+	// 如果直接转换失败，使用 mapstructure 进行高效转换
 	var resp transaction.TxDecodeResponse
-	if err := json.Unmarshal(jsonData, &resp); err != nil {
-		log.ErrorWithContext(ctx, "解码交易结果反序列化失败", "error", err)
-		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果反序列化失败: %w", err)
+	if err := mapstructure.Decode(result.Result, &resp); err != nil {
+		log.ErrorWithContext(ctx, "解码交易结果映射失败", "error", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果映射失败: %w", err)
 	}
 
 	// 返回结果
@@ -182,17 +183,17 @@ func GetTxVins(ctx context.Context, txids []string) ([]transaction.TxVinsRawResp
 		return nil, http.StatusInternalServerError, result.Error
 	}
 
-	// 转换结果
-	jsonData, err := json.Marshal(result.Result)
-	if err != nil {
-		log.ErrorWithContext(ctx, "获取交易输入数据结果序列化失败", "error", err)
-		return nil, http.StatusInternalServerError, fmt.Errorf("获取交易输入数据结果序列化失败: %w", err)
+	// 尝试直接类型转换
+	if vinsResp, ok := result.Result.([]transaction.TxVinsRawResponse); ok {
+		log.InfoWithContext(ctx, "直接类型转换成功", "count", len(vinsResp))
+		return vinsResp, http.StatusOK, nil
 	}
 
+	// 如果直接转换失败，使用 mapstructure 进行高效转换
 	var resp []transaction.TxVinsRawResponse
-	if err := json.Unmarshal(jsonData, &resp); err != nil {
-		log.ErrorWithContext(ctx, "获取交易输入数据结果反序列化失败", "error", err)
-		return nil, http.StatusInternalServerError, fmt.Errorf("获取交易输入数据结果反序列化失败: %w", err)
+	if err := mapstructure.Decode(result.Result, &resp); err != nil {
+		log.ErrorWithContext(ctx, "获取交易输入数据结果映射失败", "error", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("获取交易输入数据结果映射失败: %w", err)
 	}
 
 	// 返回结果
