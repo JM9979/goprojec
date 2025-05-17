@@ -52,7 +52,7 @@ func BroadcastTxRaw(ctx context.Context, req *transaction.TxBroadcastRequest) (*
 }
 
 // DecodeRawTx 解码原始交易的业务逻辑
-func DecodeRawTx(ctx context.Context, req *transaction.TxDecodeRawRequest) (interface{}, int, error) {
+func DecodeRawTx(ctx context.Context, req *transaction.TxDecodeRawRequest) (*transaction.TxDecodeResponse, int, error) {
 	// 验证请求参数
 	if err := req.Validate(); err != nil {
 		log.ErrorWithContext(ctx, "解码交易参数无效", "error", err)
@@ -72,9 +72,22 @@ func DecodeRawTx(ctx context.Context, req *transaction.TxDecodeRawRequest) (inte
 		return nil, http.StatusInternalServerError, result.Error
 	}
 
-	// 直接返回RPC结果，不进行序列化/反序列化
-	log.InfoWithContext(ctx, "解码原始交易完成，直接返回原始结果")
-	return result.Result, http.StatusOK, nil
+	// 尝试直接类型转换
+	if decodedTx, ok := result.Result.(transaction.TxDecodeResponse); ok {
+		log.InfoWithContext(ctx, "直接类型转换成功", "txid", decodedTx.TxID)
+		return &decodedTx, http.StatusOK, nil
+	}
+
+	// 如果直接转换失败，使用 mapstructure 进行高效转换
+	var resp transaction.TxDecodeResponse
+	if err := mapstructure.Decode(result.Result, &resp); err != nil {
+		log.ErrorWithContext(ctx, "解码交易结果映射失败", "error", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果映射失败: %w", err)
+	}
+
+	// 返回结果
+	log.InfoWithContext(ctx, "解码原始交易完成", "txid", resp.TxID)
+	return &resp, http.StatusOK, nil
 }
 
 // GetTxRawHex 获取交易原始十六进制数据的业务逻辑
@@ -111,7 +124,7 @@ func GetTxRawHex(ctx context.Context, txid string) (string, int, error) {
 }
 
 // DecodeTxByHash 通过交易ID解码交易的业务逻辑
-func DecodeTxByHash(ctx context.Context, txid string) (interface{}, int, error) {
+func DecodeTxByHash(ctx context.Context, txid string) (*transaction.TxDecodeResponse, int, error) {
 	// 验证参数
 	if txid == "" {
 		log.ErrorWithContext(ctx, "解码交易失败：交易ID不能为空")
@@ -131,9 +144,22 @@ func DecodeTxByHash(ctx context.Context, txid string) (interface{}, int, error) 
 		return nil, http.StatusInternalServerError, result.Error
 	}
 
-	// 直接返回RPC结果，不进行序列化/反序列化
-	log.InfoWithContext(ctx, "通过交易ID解码交易完成，直接返回原始结果", "txid", txid)
-	return result.Result, http.StatusOK, nil
+	// 尝试直接类型转换
+	if decodedTx, ok := result.Result.(transaction.TxDecodeResponse); ok {
+		log.InfoWithContext(ctx, "直接类型转换成功", "txid", decodedTx.TxID)
+		return &decodedTx, http.StatusOK, nil
+	}
+
+	// 如果直接转换失败，使用 mapstructure 进行高效转换
+	var resp transaction.TxDecodeResponse
+	if err := mapstructure.Decode(result.Result, &resp); err != nil {
+		log.ErrorWithContext(ctx, "解码交易结果映射失败", "error", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果映射失败: %w", err)
+	}
+
+	// 返回结果
+	log.InfoWithContext(ctx, "通过交易ID解码交易完成", "txid", txid)
+	return &resp, http.StatusOK, nil
 }
 
 // GetTxVins 获取交易输入数据的业务逻辑
