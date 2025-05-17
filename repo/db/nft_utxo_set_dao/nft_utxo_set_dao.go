@@ -122,6 +122,7 @@ func (dao *NftUtxoSetDAO) GetPoolListByFtContractId(ctx context.Context, ftContr
 	// 从nft_utxo_set表中查询与指定代币相关的所有流动池
 	// 使用nft_icon字段存储token_pair_a_id，并查询nft_holder_address='LP'的记录
 	err := dao.db.WithContext(ctx).
+		Table("TBC20721.nft_utxo_set").
 		Select("nft_contract_id, nft_create_timestamp").
 		Where("nft_holder_address = ? AND nft_icon = ?", "LP", ftContractId).
 		Find(&results).Error
