@@ -31,6 +31,7 @@ type AddressHistoryResponse struct {
 // HistoryItem 表示单个历史交易记录
 type HistoryItem struct {
 	BalanceChange      string   `json:"balance_change"`       // 余额变动
+	BanlanceChange     string   `json:"banlance_change"`      // 余额变动（字段重复，保持与接口规范一致）
 	TxHash             string   `json:"tx_hash"`              // 交易哈希
 	SenderAddresses    []string `json:"sender_addresses"`     // 发送方地址列表
 	RecipientAddresses []string `json:"recipient_addresses"`  // 接收方地址列表
