@@ -10,7 +10,7 @@ type Transaction struct {
 	TxHash    string    `db:"tx_hash" gorm:"column:tx_hash;uniqueIndex"`
 	Fee       float64   `db:"fee" gorm:"column:fee"`
 	TimeStamp int64     `db:"time_stamp" gorm:"column:time_stamp;index"`
-	UtcTime   string    `db:"utc_time" gorm:"column:utc_time"`
+	UtcTime   string    `db:"transaction_utc_time" gorm:"column:transaction_utc_time"`
 	TxType    string    `db:"tx_type" gorm:"column:tx_type;index"`
 	CreatedAt time.Time `db:"created_at" gorm:"column:created_at;autoCreateTime"`
 	UpdatedAt time.Time `db:"updated_at" gorm:"column:updated_at;autoUpdateTime"`

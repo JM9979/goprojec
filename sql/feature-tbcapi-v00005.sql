@@ -7,7 +7,7 @@ CREATE TABLE transactions (
     tx_hash VARCHAR(64) NOT NULL COMMENT '交易哈希值，唯一标识一笔交易',
     fee DECIMAL(16, 8) NOT NULL COMMENT '交易手续费',
     time_stamp BIGINT COMMENT '交易时间戳，单位秒',
-    utc_time VARCHAR(30) COMMENT '格式化的UTC时间，如：2023-01-01 12:00:00',
+    transaction_utc_time VARCHAR(30) COMMENT '格式化的UTC时间，如：2023-01-01 12:00:00',
     tx_type VARCHAR(10) NOT NULL COMMENT '交易类型，如：P2PKH、TBC20、TBC721、P2MS',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录创建时间',
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '记录更新时间',
