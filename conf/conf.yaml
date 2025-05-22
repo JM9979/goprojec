@@ -8,7 +8,7 @@ log:
 
 # 数据库配置
 db:
-  host: "develope.tbcdev.xyz"
+  host: "47.129.54.98"
   port: 3306
   username: "root"
   password: "mysql149"
@@ -19,17 +19,17 @@ db:
 
 # TBCNode RPC认证配置
 tbcnode:
-  url: "http://develope.tbcdev.xyz:8332"
+  url: "http://47.129.54.98:8332"
   user: "tbcuser"
   password: "randompasswd" 
   timeout: 30 # 连接超时时间(秒)
   maxidleconns: 10
-  maxopenconns: 50
+  maxopenconns: 100
 
 # ElectrumX RPC配置
 electrumx:
-  host: "develope.tbcdev.xyz"
-  port: 5001
+  host: "47.129.54.98"
+  port: 50001
   timeout: 30 # 连接超时时间(秒)
   retry_count: 3 # 重试次数 
   use_tls: false
