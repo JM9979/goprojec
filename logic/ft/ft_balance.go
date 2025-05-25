@@ -3,9 +3,14 @@ package ft
 import (
 	"context"
 	"fmt"
+	"strconv"
 
+	"ginproject/entity/blockchain"
 	"ginproject/entity/ft"
+	"ginproject/entity/utility"
 	"ginproject/middleware/log"
+	repoBlockchain "ginproject/repo/rpc/blockchain"
+	"ginproject/repo/rpc/electrumx"
 )
 
 // GetFtBalance 获取FT余额
@@ -197,4 +202,161 @@ func (l *FtLogic) GetTokensListHeldByAddress(ctx context.Context, req *ft.TBC20T
 
 	log.InfoWithContextf(ctx, "成功获取地址[%s]持有的代币列表，数量: %d", req.Address, len(tokenList))
 	return response, nil
+}
+
+// GetFtBalanceByCombineScript 根据合并脚本和合约哈希获取FT余额
+func (l *FtLogic) GetFtBalanceByCombineScript(ctx context.Context, req *ft.FtBalanceCombineScriptRequest) (*ft.FtBalanceCombineScriptResponse, error) {
+	// 使用entity层的验证逻辑
+	if err := req.Validate(); err != nil {
+		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
+		return nil, fmt.Errorf("参数验证失败: %v", err)
+	}
+
+	// 添加00作为校验（如果需要）
+	combineScript := req.CombineScript
+	if len(combineScript) > 0 && combineScript[len(combineScript)-2:] != "00" {
+		combineScript += "00"
+	}
+
+	log.InfoWithContextf(ctx, "根据合并脚本获取FT余额: 合并脚本=%s, 合约哈希=%s", combineScript, req.ContractHash)
+	// 获取代币小数位数
+	ftDecimal, err := l.ftTokensDAO.GetFtDecimalByContractId(ctx, req.ContractHash)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "获取代币小数位数失败: %v", err)
+		return nil, fmt.Errorf("获取代币小数位数失败: %v", err)
+	}
+	// 从数据库获取FT余额
+	dbBalance, err := l.getFtBalanceFromDB(ctx, combineScript, req.ContractHash)
+	if err == nil {
+		log.InfoWithContextf(ctx, "从数据库成功获取FT余额: %d", dbBalance)
+		// 构造响应
+		return &ft.FtBalanceCombineScriptResponse{
+			CombineScript: combineScript,
+			ContractHash:  req.ContractHash,
+			FtDecimal:     int(ftDecimal),
+			FtBalance:     dbBalance,
+		}, nil
+	}
+
+	log.WarnWithContextf(ctx, "从数据库获取FT余额失败: %v, 尝试通过RPC获取", err)
+
+	// 方法2: 通过RPC获取数据（备用方案）
+	// 1. 解码合约交易，获取合约脚本
+	decodeContractResult := <-repoBlockchain.DecodeTxHash(ctx, req.ContractHash)
+	if decodeContractResult.Error != nil {
+		log.ErrorWithContextf(ctx, "解码合约交易失败: %v", decodeContractResult.Error)
+		return nil, fmt.Errorf("解码合约交易失败: %v", decodeContractResult.Error)
+	}
+
+	contractTx, ok := decodeContractResult.Result.(*blockchain.TransactionResponse)
+	if !ok {
+		return nil, fmt.Errorf("解码合约交易响应格式错误")
+	}
+
+	if len(contractTx.Vout) == 0 {
+		return nil, fmt.Errorf("合约交易输出为空")
+	}
+
+	// 获取合约脚本
+	codeScriptHex := contractTx.Vout[0].ScriptPubKey.Hex
+	contractTrait := codeScriptHex[0 : len(codeScriptHex)-54]
+	completeScript := contractTrait + combineScript + "0502436f6465" // "0502436f6465"是"Code"的十六进制表示
+
+	// 2. 计算脚本哈希
+	scriptHash, err := utility.ConvertStrToSha256(completeScript)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "计算脚本哈希失败: %v", err)
+		return nil, fmt.Errorf("计算脚本哈希失败: %v", err)
+	}
+
+	// 3. 获取未花费的UTXO列表
+	unspentUtxos, err := electrumx.GetUnspent(ctx, scriptHash)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "获取未花费UTXO失败: %v", err)
+		return nil, fmt.Errorf("获取未花费UTXO失败: %v", err)
+	}
+
+	// 4. 计算总余额
+	var contractBalance uint64 = 0
+
+	for _, utxo := range unspentUtxos {
+		txid := utxo.TxHash
+		vout := int(utxo.TxPos) + 1 // ElectrumX索引从0开始，需要加1
+
+		// 解码未花费的交易
+		decodeUtxoTxResult := <-repoBlockchain.DecodeTxHash(ctx, txid)
+		if decodeUtxoTxResult.Error != nil {
+			log.WarnWithContextf(ctx, "解码UTXO交易失败，跳过: %v", decodeUtxoTxResult.Error)
+			continue
+		}
+
+		utxoTx, ok := decodeUtxoTxResult.Result.(*blockchain.TransactionResponse)
+		if !ok || len(utxoTx.Vout) <= vout {
+			log.WarnWithContextf(ctx, "UTXO交易输出格式错误或索引超出范围，跳过")
+			continue
+		}
+
+		// 获取脚本
+		tapeScript := utxoTx.Vout[vout].ScriptPubKey.Hex
+
+		// 提取FT值部分（根据示例为脚本的第6至102个字符）
+		if len(tapeScript) >= 102 {
+			valueHex := tapeScript[6:102]
+
+			// 分段处理8字节的FT值
+			var outputAmount uint64 = 0
+			for i := 0; i < len(valueHex); i += 16 {
+				if i+16 > len(valueHex) {
+					break
+				}
+				segment := valueHex[i : i+16]
+
+				// 字节序反转（每两个字符为一个字节）
+				var reversedSegment string
+				for j := 14; j >= 0; j -= 2 {
+					reversedSegment += segment[j : j+2]
+				}
+
+				// 转换为数值并累加
+				segmentValue, err := strconv.ParseUint(reversedSegment, 16, 64)
+				if err != nil {
+					log.WarnWithContextf(ctx, "解析FT值段失败: %v", err)
+					continue
+				}
+				outputAmount += segmentValue
+			}
+
+			contractBalance += outputAmount
+		}
+	}
+
+	log.InfoWithContextf(ctx, "通过RPC获取FT余额成功: %d", contractBalance)
+
+		// 构造响应
+	response := &ft.FtBalanceCombineScriptResponse{
+		CombineScript: combineScript,
+		ContractHash:  req.ContractHash,
+		FtDecimal:     int(ftDecimal),
+		FtBalance:     contractBalance,
+	}
+
+	return response, nil
+}
+
+// getFtBalanceFromDB 从数据库获取FT余额
+func (l *FtLogic) getFtBalanceFromDB(ctx context.Context, script string, contractHash string) (uint64, error) {
+	log.InfoWithContextf(ctx, "从数据库获取FT余额: 脚本=%s, 合约哈希=%s", script, contractHash)
+
+	// 1. 首先需要将合约哈希转换为合约ID (contractHash通常是交易ID)
+	contractId := contractHash
+
+	// 2. 查询此脚本和合约ID的总余额
+	balance, err := l.ftTxoDAO.GetTotalBalanceByHolder(ctx, script, contractId)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "从数据库查询FT余额失败: %v", err)
+		return 0, fmt.Errorf("查询FT余额失败: %v", err)
+	}
+
+	log.InfoWithContextf(ctx, "从数据库获取FT余额成功: %d", balance)
+	return balance, nil
 }

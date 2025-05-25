@@ -20,10 +20,10 @@ var globalLogger *zap.Logger
 type Level string
 
 const (
-	DebugLevel Level = "Debug"
-	InfoLevel  Level = "Info"
-	WarnLevel  Level = "Warn"
-	ErrorLevel Level = "Error"
+	DebugLevel Level = "DEBUG"
+	InfoLevel  Level = "INFO"
+	WarnLevel  Level = "WARN"
+	ErrorLevel Level = "ERROR"
 )
 
 // 创建异步写入器，带有缓冲区

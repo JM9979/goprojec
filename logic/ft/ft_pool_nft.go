@@ -2,209 +2,245 @@ package ft
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 
-	"ginproject/entity/blockchain"
 	"ginproject/entity/ft"
+	"ginproject/entity/utility"
 	"ginproject/middleware/log"
-	rpcblockchain "ginproject/repo/rpc/blockchain"
+	"ginproject/repo/db/ft_txo_dao"
+	"ginproject/repo/db/nft_utxo_set_dao"
+	"ginproject/repo/rpc/blockchain"
+	"ginproject/repo/rpc/electrumx"
+	blockchianEntity "ginproject/entity/blockchain"
 )
 
-// GetNFTPoolInfoByContractId 根据代币合约ID获取NFT池信息
+// GetNFTPoolInfoByContractId 根据合约ID获取NFT池信息
 func (l *FtLogic) GetNFTPoolInfoByContractId(ctx context.Context, req *ft.TBC20PoolNFTInfoRequest) (*ft.TBC20PoolNFTInfoResponse, error) {
-	// 使用entity层的验证逻辑
-	if err := req.Validate(); err != nil {
-		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
-		return nil, fmt.Errorf("参数验证失败: %w", err)
-	}
+	log.InfoWithContextf(ctx, "开始获取NFT池信息: ftContractId=%s", req.FtContractId)
 
-	// 1. 查询NFT池交易ID和余额
-	log.InfoWithContextf(ctx, "开始查询NFT池信息: 合约ID=%s", req.FtContractId)
-	nftUtxoId, nftCodeBalance, err := l.ftPoolNftDAO.GetPoolNftInfoByContractId(ctx, req.FtContractId)
+	// 1. 从数据库获取NFT池信息
+	nftUtxoSetDAO := nft_utxo_set_dao.NewNftUtxoSetDAO()
+	currentPoolNftTxid, currentPoolNftBalance, err := nftUtxoSetDAO.GetPoolNftInfoByContractId(ctx, req.FtContractId)
 	if err != nil {
-		log.ErrorWithContextf(ctx, "查询NFT池信息失败: %v", err)
-		return nil, fmt.Errorf("查询NFT池信息失败: %w", err)
+		log.ErrorWithContextf(ctx, "获取NFT池信息失败: %v", err)
+		return nil, fmt.Errorf("获取NFT池信息失败: %w", err)
 	}
 
-	// 检查是否找到NFT池
-	if nftUtxoId == "" {
-		log.ErrorWithContextf(ctx, "未找到NFT池: 合约ID=%s", req.FtContractId)
-		return nil, fmt.Errorf("no pool NFT found")
+	// 2. 如果找不到NFT池，返回错误
+	if currentPoolNftTxid == "" {
+		log.ErrorWithContextf(ctx, "未找到NFT池: ftContractId=%s", req.FtContractId)
+		return nil, fmt.Errorf("未找到NFT池")
 	}
 
-	// 2. 解码交易信息
-	log.InfoWithContextf(ctx, "开始解码NFT池交易: 交易ID=%s", nftUtxoId)
-	decodeTx, err := l.DecodeTxHash(ctx, nftUtxoId)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "解码NFT池交易失败: %v", err)
-		return nil, fmt.Errorf("decode pool NFT failed")
+	// 3. 获取交易详情
+	decodeTxResultChan := blockchain.DecodeTxHash(ctx, currentPoolNftTxid)
+	decodeTxResult := <-decodeTxResultChan
+	if decodeTxResult.Error != nil {
+		log.ErrorWithContextf(ctx, "解码交易失败: %v", decodeTxResult.Error)
+		return nil, fmt.Errorf("解码交易失败: %w", decodeTxResult.Error)
 	}
 
-	// 3. 初始化响应对象
-	response := &ft.TBC20PoolNFTInfoResponse{}
-	currentPoolNftTxid := nftUtxoId
-	currentPoolNftBalance := int64(nftCodeBalance)
-	var currentPoolNftVout int64 = 0
-
-	// 设置基本的NFT池信息
-	response.CurrentPoolNftTxid = &currentPoolNftTxid
-	response.CurrentPoolNftVout = &currentPoolNftVout
-	response.CurrentPoolNftBalance = &currentPoolNftBalance
-
-	// 4. 提取和解析池服务提供商信息
-	poolServiceProvider, poolVersion := l.extractPoolProviderInfo(decodeTx)
-	response.PoolServiceProvider = &poolServiceProvider
-	response.PoolVersion = &poolVersion
-
-	// 检查交易输出数量
-	if len(decodeTx.Vout) < 2 {
-		log.ErrorWithContextf(ctx, "交易输出数量不足: 交易ID=%s, 输出数量=%d", nftUtxoId, len(decodeTx.Vout))
-		return nil, fmt.Errorf("decode pool NFT failed")
+	decodeTx, ok := decodeTxResult.Result.(*blockchianEntity.TransactionResponse)
+	if !ok {
+		log.ErrorWithContextf(ctx, "解码交易结果类型错误: txid=%s", currentPoolNftTxid)
+		return nil, fmt.Errorf("解码交易结果类型错误")
 	}
 
-	// 5. 解析磁带脚本并提取余额信息
-	err = l.parseTapeScriptAndSetResponse(ctx, decodeTx, response)
-	if err != nil {
-		return nil, err
+	// 4. 解析交易输出
+	vout := decodeTx.Vout
+	if len(vout) < 2 {
+		log.ErrorWithContextf(ctx, "解码交易输出错误: txid=%s", currentPoolNftTxid)
+		return nil, fmt.Errorf("解码交易输出错误")
 	}
 
-	// 6. 记录成功日志
-	log.InfoWithContextf(ctx, "NFT池信息查询成功: 合约ID=%s, 交易ID=%s, 余额=%d, 服务提供商=%s, 版本=%d",
-		req.FtContractId, currentPoolNftTxid, currentPoolNftBalance, poolServiceProvider, *response.PoolVersion)
+	// 5. 获取池服务提供商和版本
+	vout0 := vout[0]
 
-	return response, nil
-}
+	scriptPubKey0 := vout0.ScriptPubKey
 
-// extractPoolProviderInfo 提取池服务提供商信息
-func (l *FtLogic) extractPoolProviderInfo(decodeTx *blockchain.TransactionResponse) (string, int64) {
-	var poolServiceProviderHex string = ""
-	var poolVersion int64 = 1
-
-	// 检查vout数组长度以避免索引越界
-	if len(decodeTx.Vout) > 0 {
-		asmParts := strings.Split(decodeTx.Vout[0].ScriptPubKey.Asm, " ")
-		if len(asmParts) >= 2 && asmParts[len(asmParts)-2] != "OP_RETURN" {
-			poolServiceProviderHex = asmParts[len(asmParts)-2]
-			poolVersion = 2
-		}
+	asm0 := scriptPubKey0.Asm
+	if asm0 == "" {
+		log.ErrorWithContextf(ctx, "解析asm失败: txid=%s", currentPoolNftTxid)
+		return nil, fmt.Errorf("解析asm失败")
 	}
 
-	// 尝试将服务提供商十六进制转换为字符串
+	asmParts0 := strings.Split(asm0, " ")
+	poolVersion := int64(1)
+	poolServiceProviderHex := ""
+
+	if len(asmParts0) >= 2 && asmParts0[len(asmParts0)-2] != "OP_RETURN" {
+		poolServiceProviderHex = asmParts0[len(asmParts0)-2]
+		poolVersion = 2
+	}
+
 	poolServiceProvider := ""
 	if poolServiceProviderHex != "" {
-		hexValue := blockchain.DigitalAsmToHex(poolServiceProviderHex)
-		serviceProviderBytes, err := blockchain.HexToString(hexValue)
+		digitalHex := utility.DigitalAsmToHex(poolServiceProviderHex)
+		decodedBytes, err := hex.DecodeString(digitalHex)
 		if err == nil {
-			poolServiceProvider = serviceProviderBytes
+			poolServiceProvider = string(decodedBytes)
 		}
 	}
 
-	return poolServiceProvider, poolVersion
-}
+	// 6. 解析交易输出1（复杂余额和部分哈希）
+	vout1 := vout[1]
 
-// parseTapeScriptAndSetResponse 解析磁带脚本并设置响应值
-func (l *FtLogic) parseTapeScriptAndSetResponse(ctx context.Context, decodeTx *blockchain.TransactionResponse, response *ft.TBC20PoolNFTInfoResponse) error {
-	// 解析磁带脚本
-	tapeScriptAsm := decodeTx.Vout[1].ScriptPubKey.Asm
-	tapeScriptAsmList := strings.Split(tapeScriptAsm, " ")
+	scriptPubKey1 := vout1.ScriptPubKey
 
-	// 检查磁带脚本格式是否正确
-	if len(tapeScriptAsmList) < 6 {
-		log.ErrorWithContextf(ctx, "磁带脚本格式不正确: 元素数量=%d", len(tapeScriptAsmList))
-		return fmt.Errorf("decode pool NFT failed")
+	asm1 := scriptPubKey1.Asm
+	if asm1 == "" {
+		log.ErrorWithContextf(ctx, "解析scriptPubKey1失败: txid=%s", currentPoolNftTxid)
+		return nil, fmt.Errorf("解析scriptPubKey1失败")
 	}
 
-	// 获取服务费率
-	var poolServiceFeeRateStr *string = nil
-	if len(tapeScriptAsmList) == 7 {
-		feeRateHex := tapeScriptAsmList[5]
-		poolServiceFeeRateStr = &feeRateHex
-		log.InfoWithContextf(ctx, "获取服务费率: %s", feeRateHex)
-	} else {
-		log.InfoWithContextf(ctx, "磁带脚本长度为%d，服务费率设为nil", len(tapeScriptAsmList))
+	tapeAsmList := strings.Split(asm1, " ")
+	if len(tapeAsmList) < 6 {
+		log.ErrorWithContextf(ctx, "解析交易脚本失败，数据不完整: txid=%s", currentPoolNftTxid)
+		return nil, fmt.Errorf("解析交易脚本失败，数据不完整")
 	}
-	response.PoolServiceFeeRate = poolServiceFeeRateStr
 
-	// 获取复杂部分哈希和余额
-	complexPartialHash := tapeScriptAsmList[2]
-	complexBalance := tapeScriptAsmList[3]
+	var poolServiceFeeRate *int
+	if len(tapeAsmList) >= 7 {
+		feeRateStr := tapeAsmList[5]
+		feeRate, err := strconv.Atoi(feeRateStr)
+		if err == nil {
+			poolServiceFeeRate = &feeRate
+		}
+	}
 
-	// 解析LP、A代币和TBC余额
-	ftLpBalance, ftABalance, tbcBalance, err := l.parseBalances(ctx, complexBalance)
+	complexPartialHash := tapeAsmList[2]
+	complexBalance := tapeAsmList[3]
+	ftAContractTxid := tapeAsmList[4]
+
+	// 7. 解析复杂余额
+	ftLpBalance, ftABalance, tbcBalance, err := parsePoolBalance(complexBalance)
 	if err != nil {
-		return err
+		log.ErrorWithContextf(ctx, "解析池余额失败: %v", err)
+		return nil, fmt.Errorf("解析池余额失败: %w", err)
 	}
 
-	// 设置余额
-	response.FtLpBalance = &ftLpBalance
-	response.FtABalance = &ftABalance
-	response.TbcBalance = &tbcBalance
-
-	// 获取LP和A代币的部分哈希
+	// 8. 解析部分哈希
 	ftLpPartialHash := complexPartialHash[0:64]
 	ftAPartialHash := complexPartialHash[64:128]
-	response.FtLpPartialHash = &ftLpPartialHash
-	response.FtAPartialHash = &ftAPartialHash
 
-	// 获取A代币合约交易ID和池NFT代码脚本
-	ftAContractTxid := tapeScriptAsmList[4]
-	poolNftCodeScript := decodeTx.Vout[0].ScriptPubKey.Hex
-	response.FtAContractTxid = &ftAContractTxid
-	response.PoolNftCodeScript = &poolNftCodeScript
+	// 9. 获取池NFT代码脚本
+	poolNftCodeScript := scriptPubKey0.Hex
+	if poolNftCodeScript == "" {
+		log.ErrorWithContextf(ctx, "获取池NFT代码脚本失败: txid=%s", currentPoolNftTxid)
+		return nil, fmt.Errorf("获取池NFT代码脚本失败")
+	}
 
-	return nil
+	// 10. 构建响应
+	currentPoolNftBalanceInt64 := int64(currentPoolNftBalance)
+	defaultVout := int64(0)
+
+	poolNftInfo := &ft.TBC20PoolNFTInfoResponse{
+		FtLpBalance:           &ftLpBalance,
+		FtABalance:            &ftABalance,
+		TbcBalance:            &tbcBalance,
+		PoolVersion:           &poolVersion,
+		PoolServiceFeeRate:    poolServiceFeeRate,
+		PoolServiceProvider:   &poolServiceProvider,
+		FtLpPartialHash:       &ftLpPartialHash,
+		FtAPartialHash:        &ftAPartialHash,
+		FtAContractTxid:       &ftAContractTxid,
+		PoolNftCodeScript:     &poolNftCodeScript,
+		CurrentPoolNftTxid:    &currentPoolNftTxid,
+		CurrentPoolNftVout:    &defaultVout,
+		CurrentPoolNftBalance: &currentPoolNftBalanceInt64,
+	}
+
+	log.InfoWithContextf(ctx, "成功获取NFT池信息: ftContractId=%s", req.FtContractId)
+	return poolNftInfo, nil
 }
 
-// parseBalances 解析余额信息
-func (l *FtLogic) parseBalances(ctx context.Context, complexBalance string) (int64, int64, int64, error) {
-	// 解析LP余额
-	ftLpBalance, err := blockchain.HexToInt64(blockchain.ReverseHexString(complexBalance, 0, 16))
-	if err != nil {
-		log.ErrorWithContextf(ctx, "解析LP余额失败: %v", err)
-		return 0, 0, 0, fmt.Errorf("decode pool NFT failed")
+// parsePoolBalance 解析池余额
+func parsePoolBalance(complexBalance string) (int64, int64, int64, error) {
+	if len(complexBalance) < 48 {
+		return 0, 0, 0, fmt.Errorf("复杂余额格式错误，长度不足")
 	}
 
-	// 解析A代币余额
-	ftABalance, err := blockchain.HexToInt64(blockchain.ReverseHexString(complexBalance, 16, 32))
+	// 将16个字节的LP余额反转并转换为整数
+	ftLpBalanceStr := ""
+	for i := 14; i >= 0; i -= 2 {
+		ftLpBalanceStr += complexBalance[i : i+2]
+	}
+	ftLpBalance, err := strconv.ParseInt(ftLpBalanceStr, 16, 64)
 	if err != nil {
-		log.ErrorWithContextf(ctx, "解析A代币余额失败: %v", err)
-		return 0, 0, 0, fmt.Errorf("decode pool NFT failed")
+		return 0, 0, 0, fmt.Errorf("解析LP余额失败: %w", err)
 	}
 
-	// 解析TBC余额
-	tbcBalance, err := blockchain.HexToInt64(blockchain.ReverseHexString(complexBalance, 32, 48))
+	// 将16个字节的代币A余额反转并转换为整数
+	ftABalanceStr := ""
+	for i := 30; i >= 16; i -= 2 {
+		ftABalanceStr += complexBalance[i : i+2]
+	}
+	ftABalance, err := strconv.ParseInt(ftABalanceStr, 16, 64)
 	if err != nil {
-		log.ErrorWithContextf(ctx, "解析TBC余额失败: %v", err)
-		return 0, 0, 0, fmt.Errorf("decode pool NFT failed")
+		return 0, 0, 0, fmt.Errorf("解析代币A余额失败: %w", err)
+	}
+
+	// 将16个字节的TBC余额反转并转换为整数
+	tbcBalanceStr := ""
+	for i := 46; i >= 32; i -= 2 {
+		tbcBalanceStr += complexBalance[i : i+2]
+	}
+	tbcBalance, err := strconv.ParseInt(tbcBalanceStr, 16, 64)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("解析TBC余额失败: %w", err)
 	}
 
 	return ftLpBalance, ftABalance, tbcBalance, nil
 }
 
-// DecodeTxHash 解码交易哈希，获取交易详情
-func (l *FtLogic) DecodeTxHash(ctx context.Context, txid string) (*blockchain.TransactionResponse, error) {
-	if txid == "" {
-		return nil, fmt.Errorf("交易ID不能为空")
+// GetLPUnspentByScriptHash 根据脚本哈希获取LP未花费交易输出
+func (l *FtLogic) GetLPUnspentByScriptHash(ctx context.Context, req *ft.LPUnspentByScriptHashRequest) (*ft.TBC20FTLPUnspentResponse, error) {
+	log.InfoWithContext(ctx, "开始获取LP未花费交易输出", "scriptHash", req.ScriptHash)
+
+	// 1. 从ElectrumX获取未花费的交易输出
+	unspents, err := electrumx.GetScriptHashUnspent(ctx, req.ScriptHash)
+	if err != nil {
+		log.ErrorWithContext(ctx, "获取未花费交易输出失败", "scriptHash", req.ScriptHash, "error", err)
+		return nil, err
 	}
 
-	log.InfoWithContextf(ctx, "开始解码交易: %s", txid)
-
-	// 调用repo层的RPC方法解码交易
-	resultChan := rpcblockchain.DecodeTxHash(ctx, txid)
-	result := <-resultChan
-	if result.Error != nil {
-		log.ErrorWithContextf(ctx, "解码交易失败: %v", result.Error)
-		return nil, fmt.Errorf("解码交易失败: %w", result.Error)
+	// 2. 如果没有未花费的交易输出，返回空列表
+	if len(unspents) == 0 {
+		log.InfoWithContext(ctx, "未找到未花费交易输出", "scriptHash", req.ScriptHash)
+		return &ft.TBC20FTLPUnspentResponse{FtUtxoList: []*ft.TBC20FTLPUnspentItem{}}, nil
 	}
 
-	// 类型断言转换为TransactionResponse
-	txInfo, ok := result.Result.(*blockchain.TransactionResponse)
-	if !ok {
-		log.ErrorWithContextf(ctx, "解码交易结果类型转换失败")
-		return nil, fmt.Errorf("解码交易结果类型转换失败")
+	// 3. 准备UTXO ID和输出索引列表
+	txids := make([]string, 0, len(unspents))
+	vouts := make([]int, 0, len(unspents))
+	for _, utxo := range unspents {
+		txids = append(txids, utxo.TxHash)
+		vouts = append(vouts, utxo.TxPos)
 	}
 
-	log.InfoWithContextf(ctx, "解码交易成功: %s", txid)
-	return txInfo, nil
+	// 4. 获取代币交易输出信息
+	ftTxoDAO := ft_txo_dao.NewFtTxoDAO()
+	ftTxos, err := ftTxoDAO.GetLPUnspentByIds(ctx, txids, vouts)
+	if err != nil {
+		log.ErrorWithContext(ctx, "查询代币交易输出失败", "scriptHash", req.ScriptHash, "error", err)
+		return nil, err
+	}
+
+	// 5. 构建响应
+	ftUtxoList := make([]*ft.TBC20FTLPUnspentItem, 0, len(ftTxos))
+	for _, ftTxo := range ftTxos {
+		ftUtxoList = append(ftUtxoList, &ft.TBC20FTLPUnspentItem{
+			UtxoId:       ftTxo.UtxoTxid,
+			UtxoVout:     ftTxo.UtxoVout,
+			UtxoBalance:  ftTxo.UtxoBalance,
+			FtContractId: ftTxo.FtContractId,
+			FtBalance:    int64(ftTxo.FtBalance),
+		})
+	}
+
+	log.InfoWithContextf(ctx, "成功获取LP未花费交易输出: scriptHash=%s, count=%d", req.ScriptHash, len(ftUtxoList))
+	return &ft.TBC20FTLPUnspentResponse{FtUtxoList: ftUtxoList}, nil
 }

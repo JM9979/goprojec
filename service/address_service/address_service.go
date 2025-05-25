@@ -109,7 +109,7 @@ func (s *AddressService) GetAddressHistory(c *gin.Context) {
 	}
 
 	// 调用业务逻辑层 - 使用默认模式，返回最新30条交易
-	history, err := s.addressLogic.GetAddressHistoryPage(ctx, address, false, 0)
+	history, err := s.addressLogic.GetAddressHistoryPageFromDB(ctx, address, false, 0)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取地址历史交易失败: %v", err)
 		c.JSON(http.StatusOK, gin.H{

@@ -5,411 +5,194 @@ import (
 	"fmt"
 	"strings"
 
+	"ginproject/entity/blockchain"
 	"ginproject/entity/ft"
 	"ginproject/entity/utility"
 	"ginproject/middleware/log"
-	"ginproject/repo/rpc/blockchain"
+	"ginproject/repo/db/ft_tokens_dao"
+	rpcBlockchain "ginproject/repo/rpc/blockchain"
 	"ginproject/repo/rpc/electrumx"
 )
 
-// GetPoolHistoryByPoolId 根据池子ID获取历史记录
-func (l *FtLogic) GetPoolHistoryByPoolId(ctx context.Context, req *ft.TBC20PoolHistoryRequest) ([]ft.TBC20PoolHistoryResponse, error) {
-	log.InfoWithContextf(ctx, "获取池子历史记录逻辑处理: 池子ID=%s, 页码=%d, 每页大小=%d", req.PoolId, req.Page, req.Size)
-
-	// 参数验证
+// GetPoolHistory 获取指定池的历史交易记录
+func (l *FtLogic) GetPoolHistory(ctx context.Context, req *ft.TBC20PoolHistoryRequest) ([]ft.TBC20PoolHistoryResponse, error) {
+	// 使用entity层的验证逻辑
 	if err := req.Validate(); err != nil {
-		log.ErrorWithContextf(ctx, "请求参数验证失败: %v", err)
-		return nil, err
+		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
+		return nil, fmt.Errorf("参数验证失败: %w", err)
 	}
 
-	// 使用新实现的详细方法
-	return l.GetPoolHistoryPageSize(ctx, req.PoolId, req.Page, req.Size)
-}
+	// 创建返回结果切片
+	poolHistoryList := make([]ft.TBC20PoolHistoryResponse, 0)
 
-// GetPoolHistoryPageSize 根据池子ID获取历史记录的详细实现
-// 此方法通过区块链RPC和ElectrumX查询池子的交易历史，并进行详细的分析处理
-func (l *FtLogic) GetPoolHistoryPageSize(ctx context.Context, poolId string, page int, size int) ([]ft.TBC20PoolHistoryResponse, error) {
-	log.InfoWithContextf(ctx, "开始获取池子历史详细信息: 池子ID=%s, 页码=%d, 每页大小=%d", poolId, page, size)
+	// 记录请求开始日志
+	log.InfoWithContextf(ctx, "开始获取池历史记录: 池ID=%s, 页码=%d, 页大小=%d",
+		req.PoolId, req.Page, req.Size)
 
-	// 1. 获取池子交易详情
-	txMap, err := l.getPoolTransaction(ctx, poolId)
+	// 从区块链获取池交易信息
+	decodeTxResult := <-rpcBlockchain.DecodeTxHash(ctx, req.PoolId)
+	if decodeTxResult.Error != nil {
+		log.ErrorWithContextf(ctx, "获取池交易信息失败: %v", decodeTxResult.Error)
+		return nil, fmt.Errorf("获取池交易信息失败: %w", decodeTxResult.Error)
+	}
+
+	// 类型断言获取解码交易结果
+	decodeTx, ok := decodeTxResult.Result.(*blockchain.TransactionResponse)
+	if !ok || decodeTx == nil {
+		log.ErrorWithContextf(ctx, "解析池交易结果失败: 解码结果类型错误")
+		return nil, fmt.Errorf("解析池交易结果失败: 解码结果类型错误")
+	}
+
+	// 确保有输出
+	if len(decodeTx.Vout) == 0 {
+		log.ErrorWithContextf(ctx, "池交易没有输出: %s", req.PoolId)
+		return nil, fmt.Errorf("池交易没有输出")
+	}
+
+	// 获取池脚本哈希
+	scriptPubKeyHex := decodeTx.Vout[0].ScriptPubKey.Hex
+	scriptHash, err := utility.ConvertStrToSha256(scriptPubKeyHex)
 	if err != nil {
-		return nil, err
-	}
-	if txMap == nil {
-		return []ft.TBC20PoolHistoryResponse{}, nil
+		log.ErrorWithContextf(ctx, "转换脚本哈希失败: %v", err)
+		return nil, fmt.Errorf("转换脚本哈希失败: %w", err)
 	}
 
-	// 2. 获取池子脚本哈希
-	scriptHash, err := l.getPoolScriptHash(ctx, txMap)
-	if err != nil {
-		return nil, err
-	}
-	if scriptHash == "" {
-		return []ft.TBC20PoolHistoryResponse{}, nil
-	}
-
-	// 3. 获取脚本历史记录
-	pagedHistory, err := l.getPagedScriptHistory(ctx, scriptHash, page, size)
-	if err != nil {
-		return nil, err
-	}
-
-	// 4. 处理每条历史记录
-	var poolHistoryListResult []ft.TBC20PoolHistoryResponse
-	for _, tx := range pagedHistory {
-		// 获取历史交易详情
-		historyItem, err := l.processHistoryTransaction(ctx, tx["tx_hash"].(string), poolId)
-		if err != nil {
-			log.WarnWithContextf(ctx, "处理历史交易失败: %v", err)
-			continue
-		}
-
-		poolHistoryListResult = append(poolHistoryListResult, historyItem)
-	}
-
-	log.InfoWithContextf(ctx, "获取池子历史记录成功: 池子ID=%s, 历史记录数=%d", poolId, len(poolHistoryListResult))
-	return poolHistoryListResult, nil
-}
-
-// getPoolTransaction 获取池子交易详情
-func (l *FtLogic) getPoolTransaction(ctx context.Context, poolId string) (map[string]interface{}, error) {
-	resultChan := blockchain.DecodeRawTransaction(ctx, poolId)
-	result := <-resultChan
-	if result.Error != nil {
-		log.ErrorWithContextf(ctx, "获取池子交易详情失败: %v", result.Error)
-		return nil, result.Error
-	}
-
-	// 确保交易数据有效
-	if result.Result == nil {
-		log.ErrorWithContextf(ctx, "获取到的池子交易详情为空")
-		return nil, nil
-	}
-
-	// 将interface{}转换为map以便访问
-	txMap, ok := result.Result.(map[string]interface{})
-	if !ok {
-		log.ErrorWithContextf(ctx, "交易数据类型转换失败")
-		return nil, fmt.Errorf("交易数据类型转换失败")
-	}
-
-	return txMap, nil
-}
-
-// getPoolScriptHash 获取池子脚本哈希
-func (l *FtLogic) getPoolScriptHash(ctx context.Context, txMap map[string]interface{}) (string, error) {
-	voutArray, ok := txMap["vout"].([]interface{})
-	if !ok || len(voutArray) == 0 {
-		log.ErrorWithContextf(ctx, "交易输出数据无效")
-		return "", nil
-	}
-
-	// 获取第一个输出的脚本
-	firstVout, ok := voutArray[0].(map[string]interface{})
-	if !ok {
-		log.ErrorWithContextf(ctx, "无法解析第一个交易输出")
-		return "", nil
-	}
-
-	scriptPubKey, ok := firstVout["scriptPubKey"].(map[string]interface{})
-	if !ok {
-		log.ErrorWithContextf(ctx, "无法解析scriptPubKey")
-		return "", nil
-	}
-
-	hex, ok := scriptPubKey["hex"].(string)
-	if !ok {
-		log.ErrorWithContextf(ctx, "无法获取脚本十六进制")
-		return "", nil
-	}
-
-	// 计算脚本哈希
-	scriptHash, err := utility.ConvertStrToSha256(hex)
-	if err != nil {
-		log.ErrorWithContextf(ctx, "计算脚本哈希失败: %v", err)
-		return "", err
-	}
-
-	return scriptHash, nil
-}
-
-// getPagedScriptHistory 获取分页的脚本历史记录
-func (l *FtLogic) getPagedScriptHistory(ctx context.Context, scriptHash string, page int, size int) ([]map[string]interface{}, error) {
+	// 获取池历史
 	scriptHistory, err := electrumx.GetScriptHashHistory(ctx, scriptHash)
 	if err != nil {
-		log.ErrorWithContextf(ctx, "获取脚本历史记录失败: %v", err)
-		return nil, err
+		log.ErrorWithContextf(ctx, "获取池历史失败: %v", err)
+		return nil, fmt.Errorf("获取池历史失败: %w", err)
 	}
 
-	// 转换类型为[]map[string]interface{}以便于处理
-	historyArray := make([]map[string]interface{}, 0, len(scriptHistory))
-	for _, item := range scriptHistory {
-		historyArray = append(historyArray, map[string]interface{}{
-			"tx_hash": item.TxHash,
-			"height":  item.Height,
-		})
+	// 反转历史列表以按时间降序排序
+	for i, j := 0, len(scriptHistory)-1; i < j; i, j = i+1, j-1 {
+		scriptHistory[i], scriptHistory[j] = scriptHistory[j], scriptHistory[i]
 	}
 
-	if len(historyArray) == 0 {
-		return []map[string]interface{}{}, nil
+	// 应用分页
+	startIndex := req.Page * req.Size
+	endIndex := startIndex + req.Size
+	if startIndex >= len(scriptHistory) {
+		log.InfoWithContextf(ctx, "请求的页码超出范围: 页码=%d, 总记录数=%d", req.Page, len(scriptHistory))
+		return poolHistoryList, nil
 	}
-
-	// 反转历史记录列表
-	for i, j := 0, len(historyArray)-1; i < j; i, j = i+1, j-1 {
-		historyArray[i], historyArray[j] = historyArray[j], historyArray[i]
+	if endIndex > len(scriptHistory) {
+		endIndex = len(scriptHistory)
 	}
+	pageHistory := scriptHistory[startIndex:endIndex]
 
-	// 分页处理
-	start := page * size
-	end := (page + 1) * size
-	if start >= len(historyArray) {
-		log.InfoWithContextf(ctx, "请求的页码超出历史记录范围")
-		return []map[string]interface{}{}, nil
-	}
-	if end > len(historyArray) {
-		end = len(historyArray)
-	}
+	// 处理每条历史记录
+	for _, historyItem := range pageHistory {
+		// 获取交易哈希
+		txHash := historyItem.TxHash
 
-	return historyArray[start:end], nil
-}
+		// 创建历史记录响应
+		historyResponse := ft.TBC20PoolHistoryResponse{
+			Txid:              txHash,
+			PoolId:            req.PoolId,
+			TokenPairAId:      "TBC",
+			TokenPairAName:    "TBC",
+			TokenPairADecimal: 6,
+		}
 
-// processHistoryTransaction 处理历史交易
-func (l *FtLogic) processHistoryTransaction(ctx context.Context, txHash string, poolId string) (ft.TBC20PoolHistoryResponse, error) {
-	// 获取历史交易详情
-	ResultChan := blockchain.DecodeRawTransaction(ctx, txHash)
-	result := <-ResultChan
-	if result.Error != nil {
-		return ft.TBC20PoolHistoryResponse{}, fmt.Errorf("获取历史交易详情失败: %v", result.Error)
-	}
-
-	historyTxMap, ok := result.Result.(map[string]interface{})
-	if !ok {
-		return ft.TBC20PoolHistoryResponse{}, fmt.Errorf("历史交易数据类型转换失败")
-	}
-
-	// 获取交易数据
-	vinArray, _ := historyTxMap["vin"].([]interface{})
-	voutArray, _ := historyTxMap["vout"].([]interface{})
-
-	// 获取交换地址
-	exchangeAddress := l.getExchangeAddress(ctx, vinArray)
-
-	// 获取上一次池子余额和当前池子余额
-	lastFtLpBalance, lastFtABalance, lastTbcBalance := l.getLastPoolBalance(ctx, vinArray)
-	ftLpBalance, ftABalance, tbcBalance := l.getCurrentPoolBalance(ctx, voutArray)
-
-	// 计算余额变化
-	ftLpBalanceChange := ftLpBalance - lastFtLpBalance
-	ftABalanceChange := ftABalance - lastFtABalance
-	tbcBalanceChange := tbcBalance - lastTbcBalance
-
-	// 获取代币信息
-	ftAContractId, ftAName, ftADecimal := l.getTokenInfo(ctx, voutArray)
-
-	// 构造池子历史记录响应
-	return ft.TBC20PoolHistoryResponse{
-		Txid:                        txHash,
-		PoolId:                      poolId,
-		ExchangeAddress:             exchangeAddress,
-		FtLpBalanceChange:           formatBalanceChange(ftLpBalanceChange),
-		TokenPairAId:                "TBC",
-		TokenPairAName:              "TBC",
-		TokenPairADecimal:           6, // TBC默认精度
-		TokenPairAPoolBalanceChange: formatBalanceChange(tbcBalanceChange),
-		TokenPairBId:                ftAContractId,
-		TokenPairBName:              ftAName,
-		TokenPairBDecimal:           ftADecimal,
-		TokenPairBPoolBalanceChange: formatBalanceChange(ftABalanceChange),
-	}, nil
-}
-
-// getExchangeAddress 从交易输入中获取交换地址
-func (l *FtLogic) getExchangeAddress(ctx context.Context, vinArray []interface{}) string {
-	if len(vinArray) == 0 {
-		return ""
-	}
-
-	for _, vinInterface := range vinArray {
-		vin, ok := vinInterface.(map[string]interface{})
-		if !ok {
+		// 获取历史交易详情
+		historyDecodeTxResult := <-rpcBlockchain.DecodeTxHash(ctx, txHash)
+		if historyDecodeTxResult.Error != nil {
+			log.WarnWithContextf(ctx, "获取历史交易详情失败, 跳过: %v", historyDecodeTxResult.Error)
 			continue
 		}
 
-		scriptSig, ok := vin["scriptSig"].(map[string]interface{})
-		if !ok {
+		// 类型断言获取历史交易
+		historyDecodeTx, ok := historyDecodeTxResult.Result.(*blockchain.TransactionResponse)
+		if !ok || historyDecodeTx == nil {
+			log.WarnWithContextf(ctx, "解析历史交易结果失败, 跳过: 解码结果类型错误")
 			continue
 		}
 
-		asm, ok := scriptSig["asm"].(string)
-		if !ok {
-			continue
-		}
-
-		// 检查脚本特征
-		if len(asm) > 0 && asm[0:2] == "30" && len(asm) < 500 {
-			// 从公钥获取地址
-			if len(asm) >= 66 {
-				pubKey := asm[len(asm)-66:]
-				// 临时使用AddressToPublicKeyHash代替
-				pubKeyHash, err := utility.ConvertAddressToPublicKeyHash(pubKey)
-				if err == nil {
-					return pubKeyHash
+		// 获取交易地址
+		exchangeAddress := ""
+		for _, vin := range historyDecodeTx.Vin {
+			// 检查是否是签名交易且ASM长度合适
+			if len(vin.ScriptSig.Asm) > 0 && vin.ScriptSig.Asm[0:2] == "30" && len(vin.ScriptSig.Asm) < 500 {
+				// 获取公钥并转换为地址
+				if len(vin.ScriptSig.Asm) >= 66 {
+					pubkey := vin.ScriptSig.Asm[len(vin.ScriptSig.Asm)-66:]
+					addr, err := utility.ConvertCompressedPubkeyToLegacyAddress(pubkey)
+					if err == nil {
+						exchangeAddress = addr
+						break
+					}
 				}
-				log.WarnWithContextf(ctx, "公钥转换为地址失败: %v", err)
 			}
 		}
+		historyResponse.ExchangeAddress = exchangeAddress
+
+		// 获取上一个池余额
+		var lastFtLpBalance, lastFtABalance, lastTbcBalance int64
+		if len(historyDecodeTx.Vin) > 0 &&
+			len(historyDecodeTx.Vin[0].ScriptSig.Asm) > 0 &&
+			historyDecodeTx.Vin[0].ScriptSig.Asm[0:2] == "30" &&
+			len(historyDecodeTx.Vin[0].ScriptSig.Asm) > 500 {
+
+			lastTxid := historyDecodeTx.Vin[0].Txid
+			lastTxResult := <-rpcBlockchain.DecodeTxHash(ctx, lastTxid)
+			if lastTxResult.Error == nil {
+				if lastTx, ok := lastTxResult.Result.(*blockchain.TransactionResponse); ok && lastTx != nil && len(lastTx.Vout) > 1 {
+					var err error
+					lastFtLpBalance, lastFtABalance, lastTbcBalance, err = utility.GetPoolBalance(lastTx.Vout[1].ScriptPubKey.Asm)
+					if err != nil {
+						log.WarnWithContextf(ctx, "解析上一个池余额失败: %v", err)
+					}
+				}
+			}
+		}
+
+		// 获取当前池余额
+		var ftLpBalance, ftABalance, tbcBalance int64
+		if len(historyDecodeTx.Vout) > 1 {
+			var err error
+			ftLpBalance, ftABalance, tbcBalance, err = utility.GetPoolBalance(historyDecodeTx.Vout[1].ScriptPubKey.Asm)
+			if err != nil {
+				log.WarnWithContextf(ctx, "解析当前池余额失败: %v", err)
+				continue
+			}
+		}
+
+		// 计算余额变化
+		ftLpBalanceChange := ftLpBalance - lastFtLpBalance
+		ftABalanceChange := ftABalance - lastFtABalance
+		tbcBalanceChange := tbcBalance - lastTbcBalance
+
+		historyResponse.FtLpBalanceChange = &ftLpBalanceChange
+		historyResponse.TokenPairAPoolBalanceChange = &tbcBalanceChange
+
+		// 获取代币B信息
+		if len(historyDecodeTx.Vout) > 1 {
+			asmParts := strings.Split(historyDecodeTx.Vout[1].ScriptPubKey.Asm, " ")
+			if len(asmParts) > 4 {
+				ftContractId := asmParts[4]
+				historyResponse.TokenPairBId = ftContractId
+
+				// 获取代币信息
+				ftTokensDAO := ft_tokens_dao.NewFtTokensDAO()
+				tokenInfo, err := ftTokensDAO.GetFtTokenById(ftContractId)
+				if err != nil {
+					log.WarnWithContextf(ctx, "获取代币信息失败: %v", err)
+				} else if tokenInfo != nil {
+					historyResponse.TokenPairBName = tokenInfo.FtName
+					historyResponse.TokenPairBDecimal = int(tokenInfo.FtDecimal)
+				}
+
+				historyResponse.TokenPairBPoolBalanceChange = &ftABalanceChange
+			}
+		}
+
+		// 添加到结果列表
+		poolHistoryList = append(poolHistoryList, historyResponse)
 	}
 
-	return ""
-}
+	log.InfoWithContextf(ctx, "成功获取池历史记录: 池ID=%s, 返回记录数=%d",
+		req.PoolId, len(poolHistoryList))
 
-// getLastPoolBalance 获取上一次池子余额
-func (l *FtLogic) getLastPoolBalance(ctx context.Context, vinArray []interface{}) (int64, int64, int64) {
-	if len(vinArray) == 0 {
-		return 0, 0, 0
-	}
-
-	firstVin, ok := vinArray[0].(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	scriptSig, ok := firstVin["scriptSig"].(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	asm, ok := scriptSig["asm"].(string)
-	if !ok || len(asm) <= 0 || asm[0:2] != "30" || len(asm) <= 500 {
-		return 0, 0, 0
-	}
-
-	lastTxid, ok := firstVin["txid"].(string)
-	if !ok {
-		return 0, 0, 0
-	}
-
-	ResultChan := blockchain.DecodeRawTransaction(ctx, lastTxid)
-	result := <-ResultChan
-	if result.Error != nil {
-		log.WarnWithContextf(ctx, "获取上一笔交易失败: %v", result.Error)
-		return 0, 0, 0
-	}
-
-	decodedLastTxMap, ok := result.Result.(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	lastVoutArray, ok := decodedLastTxMap["vout"].([]interface{})
-	if !ok || len(lastVoutArray) <= 1 {
-		return 0, 0, 0
-	}
-
-	lastVout, ok := lastVoutArray[1].(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	lastScriptPubKey, ok := lastVout["scriptPubKey"].(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	lastAsm, ok := lastScriptPubKey["asm"].(string)
-	if !ok {
-		return 0, 0, 0
-	}
-
-	lastFtLpBalance, lastFtABalance, lastTbcBalance, err := utility.GetPoolBalanceFromTapeASM(lastAsm)
-	if err != nil {
-		log.WarnWithContextf(ctx, "解析上一次池子余额失败: %v", err)
-		return 0, 0, 0
-	}
-
-	return lastFtLpBalance, lastFtABalance, lastTbcBalance
-}
-
-// getCurrentPoolBalance 获取当前池子余额
-func (l *FtLogic) getCurrentPoolBalance(ctx context.Context, voutArray []interface{}) (int64, int64, int64) {
-	if len(voutArray) <= 1 {
-		return 0, 0, 0
-	}
-
-	vout, ok := voutArray[1].(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	scriptPubKey, ok := vout["scriptPubKey"].(map[string]interface{})
-	if !ok {
-		return 0, 0, 0
-	}
-
-	asm, ok := scriptPubKey["asm"].(string)
-	if !ok {
-		return 0, 0, 0
-	}
-
-	ftLpBalance, ftABalance, tbcBalance, err := utility.GetPoolBalanceFromTapeASM(asm)
-	if err != nil {
-		log.WarnWithContextf(ctx, "解析当前池子余额失败: %v", err)
-		return 0, 0, 0
-	}
-
-	return ftLpBalance, ftABalance, tbcBalance
-}
-
-// getTokenInfo 获取代币信息
-func (l *FtLogic) getTokenInfo(ctx context.Context, voutArray []interface{}) (string, string, int) {
-	var ftAContractId string
-	var ftAName string
-	var ftADecimal int = 8 // 默认精度
-
-	if len(voutArray) <= 1 {
-		return ftAContractId, ftAName, ftADecimal
-	}
-
-	vout1, ok := voutArray[1].(map[string]interface{})
-	if !ok {
-		return ftAContractId, ftAName, ftADecimal
-	}
-
-	scriptPubKey, ok := vout1["scriptPubKey"].(map[string]interface{})
-	if !ok {
-		return ftAContractId, ftAName, ftADecimal
-	}
-
-	asm, ok := scriptPubKey["asm"].(string)
-	if !ok {
-		return ftAContractId, ftAName, ftADecimal
-	}
-
-	// 解析ASM字符串，获取合约ID
-	asmParts := strings.Split(asm, " ")
-	if len(asmParts) <= 4 {
-		return ftAContractId, ftAName, ftADecimal
-	}
-
-	ftAContractId = asmParts[4]
-	// 查询数据库获取代币信息
-	token, err := l.ftTokensDAO.GetFtTokenById(ftAContractId)
-	if err == nil && token != nil {
-		ftAName = token.FtName
-		ftADecimal = int(token.FtDecimal)
-	} else {
-		log.WarnWithContextf(ctx, "获取代币信息失败: %v", err)
-		ftAName = ftAContractId // 如果获取失败，使用合约ID作为名称
-	}
-
-	return ftAContractId, ftAName, ftADecimal
-}
-
-// formatBalanceChange 将余额变化转换为指针类型，支持整数和null值
-func formatBalanceChange(balance int64) *int64 {
-	if balance == 0 {
-		return nil
-	}
-	return &balance
+	return poolHistoryList, nil
 }

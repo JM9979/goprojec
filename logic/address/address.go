@@ -11,9 +11,13 @@ import (
 	"time"
 
 	"ginproject/entity/blockchain"
+	"ginproject/entity/dbtable"
 	"ginproject/entity/electrumx"
 	utility "ginproject/entity/utility"
 	"ginproject/middleware/log"
+	"ginproject/repo/db/address_transactions_dao"
+	"ginproject/repo/db/transaction_participants_dao"
+	"ginproject/repo/db/transactions_dao"
 	rpcbchain "ginproject/repo/rpc/blockchain"
 	rpcex "ginproject/repo/rpc/electrumx"
 )
@@ -210,21 +214,47 @@ func (l *AddressLogic) getPagedHistory(ctx context.Context, address, scriptHash 
 	return historyCount, neededItems, nil
 }
 
-// processHistoryItems 处理历史交易记录
+// processHistoryItems 处理历史交易记录（使用并发工作池）
 func (l *AddressLogic) processHistoryItems(ctx context.Context, address string, neededItems electrumx.ElectrumXHistoryResponse) []electrumx.HistoryItem {
-	// 创建结果列表
-	result := make([]electrumx.HistoryItem, 0, len(neededItems))
-
-	// 处理每条交易记录
-	for _, item := range neededItems {
-		historyItem, ok := l.processTransactionItem(ctx, address, item)
-		if !ok {
-			continue
-		}
-		result = append(result, historyItem)
+	// 如果没有需要处理的项，则返回空结果
+	if len(neededItems) == 0 {
+		return []electrumx.HistoryItem{}
 	}
 
-	return result
+	// 记录开始处理时间，用于性能监控
+	startTime := time.Now()
+	log.InfoWithContext(ctx, "开始并发处理历史交易记录",
+		"address:", address,
+		"items_count:", len(neededItems))
+
+	// 创建历史交易处理器函数
+	processor := func(ctx context.Context, item electrumx.ElectrumXHistoryItem) (electrumx.HistoryItem, error) {
+		log.InfoWithContext(ctx, "处理交易项", "txid:", item.TxHash)
+		historyItem, ok := l.processTransactionItem(ctx, address, item)
+		if !ok {
+			return electrumx.HistoryItem{}, fmt.Errorf("处理交易 %s 失败", item.TxHash)
+		}
+		return historyItem, nil
+	}
+
+	// 使用工作池处理所有交易记录，并发数为10
+	results, errors := utility.WorkerPoolWithContext(ctx, neededItems, 10, processor)
+
+	// 记录处理结果统计
+	log.InfoWithContext(ctx, "历史交易处理统计",
+		"address:", address,
+		"successful:", len(results),
+		"errors:", len(errors),
+		"total_duration_ms:", time.Since(startTime).Milliseconds())
+
+	if len(errors) > 0 {
+		// 记录处理失败的交易信息，但继续返回成功的结果
+		log.WarnWithContext(ctx, "部分交易处理失败",
+			"address:", address,
+			"error_count:", len(errors))
+	}
+
+	return results
 }
 
 // processTransactionItem 处理单个交易记录
@@ -276,7 +306,6 @@ func (l *AddressLogic) processTransactionItem(ctx context.Context, address strin
 	// 创建历史记录项
 	historyItem := electrumx.HistoryItem{
 		BalanceChange:      balanceFloatStr,
-		BanlanceChange:     balanceFloatStr, // 为了保持与API规范一致
 		TxHash:             txid,
 		SenderAddresses:    senderAddresses,
 		RecipientAddresses: recipientAddresses,
@@ -604,4 +633,274 @@ func (l *AddressLogic) GetAddressFrozenBalance(ctx context.Context, address stri
 		"frozen:", frozenBalanceResponse.Frozen)
 
 	return frozenBalanceResponse, nil
+}
+
+// GetAddressHistoryPageFromDB 获取地址历史交易信息，从数据库查询（支持分页）
+func (l *AddressLogic) GetAddressHistoryPageFromDB(ctx context.Context, address string, asPage bool, page int) (*electrumx.AddressHistoryResponse, error) {
+	// 记录开始处理的日志
+	log.InfoWithContext(ctx, "开始获取地址的交易历史(数据库异步模式)",
+		"address:", address,
+		"asPage:", asPage,
+		"page:", page)
+
+	// 创建上下文，允许取消操作
+	ctxWithCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// 验证地址并获取脚本哈希
+	scriptHash, err := l.validateAddressAndGetScriptHash(ctx, address)
+	if err != nil {
+		return nil, err
+	}
+
+	// 设置分页参数
+	limit := 10
+	if !asPage {
+		limit = 30
+	}
+	offset := page * limit
+
+	// 定义结果通道
+	type queryResult struct {
+		historyResponse electrumx.ElectrumXHistoryResponse
+		addrTxs         []*dbtable.AddressTransaction
+		txDetails       []*dbtable.Transaction
+		participants    []*dbtable.TransactionParticipant
+		err             error
+		queryType       string
+	}
+
+	resultChan := make(chan queryResult, 4)
+
+	// 异步查询交易历史总数
+	go func() {
+		historyResponse, err := rpcex.GetScriptHashHistory(ctxWithCancel, scriptHash)
+		if err != nil {
+			log.ErrorWithContext(ctx, "获取交易历史失败",
+				"address:", address,
+				"scriptHash:", scriptHash,
+				"错误:", err)
+			resultChan <- queryResult{err: fmt.Errorf("获取交易历史失败: %w", err), queryType: "historyResponse"}
+			return
+		}
+		resultChan <- queryResult{historyResponse: historyResponse, queryType: "historyResponse"}
+	}()
+
+	// 异步查询地址交易列表
+	go func() {
+		addrTxs, err := address_transactions_dao.GetAddressTransactions(ctxWithCancel, address, offset, limit)
+		if err != nil {
+			log.ErrorWithContext(ctx, "查询地址交易记录失败",
+				"address:", address,
+				"offset:", offset,
+				"limit:", limit,
+				"错误:", err)
+			resultChan <- queryResult{err: fmt.Errorf("查询地址交易记录失败: %w", err), queryType: "addrTxs"}
+			return
+		}
+		resultChan <- queryResult{addrTxs: addrTxs, queryType: "addrTxs"}
+	}()
+
+	// 等待前两个查询结果完成
+	var historyResponse electrumx.ElectrumXHistoryResponse
+	var addrTxs []*dbtable.AddressTransaction
+
+	for i := 0; i < 2; i++ {
+		result := <-resultChan
+		if result.err != nil {
+			return nil, result.err
+		}
+
+		switch result.queryType {
+		case "historyResponse":
+			historyResponse = result.historyResponse
+		case "addrTxs":
+			addrTxs = result.addrTxs
+		}
+	}
+
+	// 交易数量
+	historyCount := len(historyResponse)
+	log.InfoWithContext(ctx, "获取到交易历史记录数",
+		"address:", address,
+		"count:", historyCount)
+
+	// 如果没有交易记录，返回空结果
+	if len(addrTxs) == 0 {
+		log.InfoWithContext(ctx, "地址没有交易记录",
+			"address:", address,
+			"offset:", offset,
+			"limit:", limit)
+		return &electrumx.AddressHistoryResponse{
+			Address:      address,
+			Script:       scriptHash,
+			HistoryCount: int(historyCount),
+			Result:       []electrumx.HistoryItem{},
+		}, nil
+	}
+
+	// 提取交易哈希列表
+	txHashes := make([]string, 0, len(addrTxs))
+	for _, tx := range addrTxs {
+		txHashes = append(txHashes, tx.TxHash)
+	}
+
+	// 异步查询交易详情
+	go func() {
+		txDetails, err := transactions_dao.GetTransactionsByTxHashes(ctxWithCancel, txHashes)
+		if err != nil {
+			log.ErrorWithContext(ctx, "查询交易详情失败",
+				"address:", address,
+				"txHashes:", txHashes,
+				"错误:", err)
+			resultChan <- queryResult{err: fmt.Errorf("查询交易详情失败: %w", err), queryType: "txDetails"}
+			return
+		}
+		resultChan <- queryResult{txDetails: txDetails, queryType: "txDetails"}
+	}()
+
+	// 异步查询交易参与方
+	go func() {
+		participants, err := transaction_participants_dao.GetParticipantsByTxHashes(ctxWithCancel, txHashes)
+		if err != nil {
+			log.ErrorWithContext(ctx, "查询交易参与方失败",
+				"address:", address,
+				"txHashes:", txHashes,
+				"错误:", err)
+			resultChan <- queryResult{err: fmt.Errorf("查询交易参与方失败: %w", err), queryType: "participants"}
+			return
+		}
+		resultChan <- queryResult{participants: participants, queryType: "participants"}
+	}()
+
+	// 等待后两个查询结果
+	var txDetails []*dbtable.Transaction
+	var participants []*dbtable.TransactionParticipant
+
+	for i := 0; i < 2; i++ {
+		result := <-resultChan
+		if result.err != nil {
+			return nil, result.err
+		}
+
+		switch result.queryType {
+		case "txDetails":
+			txDetails = result.txDetails
+		case "participants":
+			participants = result.participants
+		}
+	}
+
+	log.InfoWithContext(ctx, "异步查询完成",
+		"address:", address,
+		"txDetails数:", len(txDetails),
+		"participants数:", len(participants))
+
+	// 整理数据，构建响应
+	result := l.buildHistoryItemsFromDB(ctx, address, addrTxs, txDetails, participants)
+
+	// 按时间戳排序
+	l.sortHistoryByTimestamp(result)
+
+	// 创建响应
+	response := &electrumx.AddressHistoryResponse{
+		Address:      address,
+		Script:       scriptHash,
+		HistoryCount: int(historyCount),
+		Result:       result,
+	}
+
+	log.InfoWithContext(ctx, "成功获取地址交易历史(数据库异步模式)",
+		"address:", address,
+		"asPage:", asPage,
+		"page:", page,
+		"total_count:", historyCount,
+		"returned_count:", len(result))
+
+	return response, nil
+}
+
+// buildHistoryItemsFromDB 从数据库查询结果构建历史记录项
+func (l *AddressLogic) buildHistoryItemsFromDB(
+	ctx context.Context,
+	address string,
+	addrTxs []*dbtable.AddressTransaction,
+	txDetails []*dbtable.Transaction,
+	participants []*dbtable.TransactionParticipant,
+) []electrumx.HistoryItem {
+	// 将交易详情转换为map，方便查询
+	txMap := make(map[string]*dbtable.Transaction)
+	for _, tx := range txDetails {
+		txMap[tx.TxHash] = tx
+	}
+
+	// 将交易参与方转换为map，方便查询
+	participantMap := make(map[string]map[dbtable.Role][]string)
+	for _, p := range participants {
+		if _, ok := participantMap[p.TxHash]; !ok {
+			participantMap[p.TxHash] = make(map[dbtable.Role][]string)
+		}
+		participantMap[p.TxHash][p.Role] = append(participantMap[p.TxHash][p.Role], p.Address)
+	}
+
+	// 构建历史记录项
+	result := make([]electrumx.HistoryItem, 0, len(addrTxs))
+	for _, addrTx := range addrTxs {
+		// 查找交易详情
+		tx, ok := txMap[addrTx.TxHash]
+		if !ok {
+			log.WarnWithContext(ctx, "未找到交易详情，跳过此记录",
+				"address:", address,
+				"txHash:", addrTx.TxHash)
+			continue
+		}
+
+		// 获取发送方和接收方地址列表
+		senderAddresses := []string{}
+		if senders, ok := participantMap[addrTx.TxHash][dbtable.RoleSender]; ok {
+			senderAddresses = senders
+		}
+
+		recipientAddresses := []string{}
+		if recipients, ok := participantMap[addrTx.TxHash][dbtable.RoleRecipient]; ok {
+			recipientAddresses = recipients
+		}
+
+		// 确保发送方和接收方列表不为空
+		if len(senderAddresses) == 0 {
+			senderAddresses = append(senderAddresses, address)
+		}
+		if len(recipientAddresses) == 0 {
+			recipientAddresses = append(recipientAddresses, address)
+		}
+
+		// 格式化余额变化
+		balanceChange := fmt.Sprintf("%+.6f", addrTx.BalanceChange)
+		balanceChange = strings.TrimRight(balanceChange, "0")
+		balanceChange = strings.TrimRight(balanceChange, ".")
+		if balanceChange == "+" || balanceChange == "" {
+			balanceChange = "0"
+		}
+
+		// 格式化手续费
+		feeStr := fmt.Sprintf("%.8f", tx.Fee)
+		feeStr = strings.TrimRight(feeStr, "0")
+		feeStr = strings.TrimRight(feeStr, ".")
+
+		// 创建历史记录项
+		historyItem := electrumx.HistoryItem{
+			BalanceChange:      balanceChange,
+			TxHash:             addrTx.TxHash,
+			SenderAddresses:    senderAddresses,
+			RecipientAddresses: recipientAddresses,
+			Fee:                feeStr,
+			TimeStamp:          tx.TimeStamp,
+			UtcTime:            tx.UtcTime,
+			TxType:             tx.TxType,
+		}
+
+		result = append(result, historyItem)
+	}
+
+	return result
 }

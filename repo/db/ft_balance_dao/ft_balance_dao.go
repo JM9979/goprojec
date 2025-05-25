@@ -93,7 +93,7 @@ func (dao *FtBalanceDAO) GetSumBalanceByContractId(contractId string) (uint64, e
 // GetHoldersCountByContractId 获取某代币的持有者数量
 func (dao *FtBalanceDAO) GetHoldersCountByContractId(contractId string) (int64, error) {
 	var count int64
-	err := dao.db.Model(&dbtable.FtBalance{}).Where("ft_contract_id = ? AND ft_balance > 0", contractId).Count(&count).Error
+	err := dao.db.Model(&dbtable.FtBalance{}).Where("ft_contract_id = ?", contractId).Count(&count).Error
 	return count, err
 }
 
@@ -105,7 +105,7 @@ func (dao *FtBalanceDAO) GetFtBalanceRankByContractId(ctx context.Context, contr
 	offset := page * size
 
 	// 查询持有者排名，按持有余额降序排序
-	err := dao.db.Where("ft_contract_id = ? AND ft_balance > 0", contractId).
+	err := dao.db.Where("ft_contract_id = ?", contractId).
 		Order("ft_balance DESC").
 		Offset(offset).
 		Limit(size).

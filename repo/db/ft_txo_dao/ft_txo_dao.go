@@ -230,3 +230,33 @@ func (dao *FtTxoDAO) GetFtContractIdsByHolder(ctx context.Context, holderScript 
 
 	return contractIds, nil
 }
+
+// GetLPUnspentByIds 根据UTXO ID和输出索引列表获取LP未花费交易输出
+func (dao *FtTxoDAO) GetLPUnspentByIds(ctx context.Context, txids []string, vouts []int) ([]*dbtable.FtTxoSet, error) {
+	if len(txids) != len(vouts) {
+		log.ErrorWithContext(ctx, "获取LP未花费交易输出参数错误: txids和vouts长度不匹配")
+		return nil, nil
+	}
+
+	if len(txids) == 0 {
+		return []*dbtable.FtTxoSet{}, nil
+	}
+
+	// 构建查询条件
+	var result []*dbtable.FtTxoSet
+	tx := dao.db.WithContext(ctx)
+
+	// 使用事务执行批量查询
+	for i := 0; i < len(txids); i++ {
+		var records []*dbtable.FtTxoSet
+		if err := tx.Where("utxo_txid = ? AND utxo_vout = ? AND if_spend = ?",
+			txids[i], vouts[i], false).Find(&records).Error; err != nil {
+			log.ErrorWithContext(ctx, "查询LP未花费交易输出失败", "txid", txids[i], "vout", vouts[i], "error", err)
+			continue
+		}
+		result = append(result, records...)
+	}
+
+	log.InfoWithContext(ctx, "成功获取LP未花费交易输出", "记录数", len(result))
+	return result, nil
+}

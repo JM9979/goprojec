@@ -30,7 +30,7 @@ type TBC20PoolNFTInfoResponse struct {
 	FtABalance            *int64  `json:"ft_a_balance,omitempty"`
 	TbcBalance            *int64  `json:"tbc_balance,omitempty"`
 	PoolVersion           *int64  `json:"pool_version,omitempty"`
-	PoolServiceFeeRate    *string `json:"pool_service_fee_rate,omitempty"`
+	PoolServiceFeeRate    *int    `json:"pool_service_fee_rate,omitempty"`
 	PoolServiceProvider   *string `json:"pool_service_provider,omitempty"`
 	FtLpPartialHash       *string `json:"ft_lp_partial_hash,omitempty"`
 	FtAPartialHash        *string `json:"ft_a_partial_hash,omitempty"`
