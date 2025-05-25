@@ -504,7 +504,7 @@ func (logic *NFTLogic) GetNftHistoryByAddress(ctx context.Context, address strin
 
 		// 获取交易时间戳和UTC时间
 		if item.Height < 1 {
-			utcTime = "未确认"
+			utcTime = "unconfirmed"
 		} else {
 			// 获取区块信息
 			blockInfoChan := rpcblockchain.GetBlockByHeight(ctx, int64(item.Height))
