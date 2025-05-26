@@ -116,6 +116,22 @@ type TBC20FTBalanceResponse struct {
 	FtBalance uint64 `json:"ftBalance"`
 }
 
+// TBC20TokenListHeldByCombineScriptRequest 通过合并脚本获取代币列表请求
+type TBC20TokenListHeldByCombineScriptRequest struct {
+	// 合并脚本
+	CombineScript string `uri:"combine_script" binding:"required"`
+}
+
+// Validate 验证TBC20TokenListHeldByCombineScriptRequest的参数
+func (req *TBC20TokenListHeldByCombineScriptRequest) Validate() error {
+	// 检查合并脚本是否为空
+	if req.CombineScript == "" {
+		return fmt.Errorf("合并脚本不能为空")
+	}
+
+	return nil
+}
+
 // TBC20TokenListHeldByAddressRequest 获取地址持有的代币列表请求
 type TBC20TokenListHeldByAddressRequest struct {
 	// 用户钱包地址
@@ -150,6 +166,16 @@ func (req *TBC20TokenListHeldByAddressRequest) Validate() error {
 type TBC20TokenListHeldByAddressResponse struct {
 	// 查询的地址
 	Address string `json:"address"`
+	// 地址持有的代币数量
+	TokenCount int `json:"token_count"`
+	// 代币列表
+	TokenList []TokenInfo `json:"token_list"`
+}
+
+// TBC20TokenListHeldByCombineScriptResponse 通过合并脚本获取代币列表响应
+type TBC20TokenListHeldByCombineScriptResponse struct {
+	// 查询的地址
+	CombineScript string `json:"combine_script"`
 	// 地址持有的代币数量
 	TokenCount int `json:"token_count"`
 	// 代币列表

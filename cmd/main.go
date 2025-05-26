@@ -68,6 +68,8 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/ft/history/address/:address/contract/:contract_id/page/:page/size/:size", ftService.GetFtHistoryByAddress)
 	// 添加获取代币列表的路由
 	apiGroup.GET("/ft/tokens/page/:page/size/:size/orderby/:order_by", ftService.GetFtTokenList)
+	// 添加通过合并脚本获取代币列表的路由
+	apiGroup.GET("/ft/tokens/held/by/combine/script/:combine_script", ftService.GetFtTokenListHeldByCombineScript)
 	// 添加解析FT交易历史的路由
 	apiGroup.GET("/ft/decode/tx/history/:txid", ftService.DecodeFtTransactionHistory)
 	// 添加获取代币相关流动池列表的路由
