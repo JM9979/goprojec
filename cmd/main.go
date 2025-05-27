@@ -95,9 +95,9 @@ func registerRoutes(r *gin.Engine) {
 	// 添加获取地址历史交易的路由
 	apiGroup.GET("/address/:address/history", addressService.GetAddressHistory)
 	// 添加获取地址历史交易分页的路由
-	apiGroup.GET("/address/:address/history/page/:page", addressService.GetAddressHistoryPaged)
+	apiGroup.GET("/address/:address/history/page/:page", addressService.GetAddressHistoryPagedFromDB)
 	// 添加获取地址历史交易记录分页使用数据库查询的路由
-	apiGroup.GET("/address/:address/allhistory/page/:page", addressService.GetAddressHistoryPagedFromDB)
+	apiGroup.GET("/address/:address/allhistory/page/:page", addressService.GetAddressHistoryPaged)
 	// 添加获取地址余额的路由
 	apiGroup.GET("/address/:address/get/balance", addressService.GetAddressBalance)
 	// 添加获取地址冻结余额的路由
