@@ -149,10 +149,48 @@ func (s *AddressService) GetAddressHistoryPaged(c *gin.Context) {
 	}
 
 	// 调用业务逻辑层，启用分页模式
-	history, err := s.addressLogic.GetAddressHistoryPageFromDB(ctx, address, true, page)
+	history, err := s.addressLogic.GetAddressHistoryPage(ctx, address, true, page)
 	if err != nil {
 		log.ErrorWithContextf(ctx, "获取地址历史交易失败: %v", err)
 		c.JSON(http.StatusOK, gin.H{
+			"code":    http.StatusInternalServerError,
+			"message": "获取地址历史交易失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 返回成功响应
+	c.JSON(http.StatusOK, history)
+}
+
+// GetAddressHistoryPagedFromDB 获取地址历史交易信息（分页版）
+// @Router /v1/tbc/main/address/{address}/allhistory/page/{page} [get]
+func (s *AddressService) GetAddressHistoryPagedFromDB(c *gin.Context) {
+	// 获取上下文和参数
+	ctx := c.Request.Context()
+	address := c.Param("address")
+	pageStr := c.Param("page")
+	page, _ := strconv.Atoi(pageStr)
+
+	// 记录请求日志
+	log.InfoWithContext(ctx, "收到获取地址历史交易分页请求",
+		"address:", address,
+		"page:", page)
+
+	// 参数验证
+	if address == "" || page < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"code":    http.StatusBadRequest,
+			"message": "地址参数不能为空",
+		})
+		return
+	}
+
+	// 调用业务逻辑层，启用分页模式
+	history, err := s.addressLogic.GetAddressHistoryPageFromDB(ctx, address, true, page)
+	if err != nil {
+		log.ErrorWithContextf(ctx, "获取地址历史交易失败: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
 			"code":    http.StatusInternalServerError,
 			"message": "获取地址历史交易失败: " + err.Error(),
 		})
