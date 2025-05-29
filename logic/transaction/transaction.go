@@ -35,19 +35,22 @@ func BroadcastTxRaw(ctx context.Context, req *transaction.TxBroadcastRequest) (*
 	}
 
 	// 转换结果为txid字符串
-	txid, ok := result.Result.(string)
+	resp, ok := result.Result.(*transaction.BroadcastResponse)
 	if !ok {
-		log.ErrorWithContext(ctx, "结果类型转换失败", "type", fmt.Sprintf("%T", result.Result))
-		return nil, http.StatusInternalServerError, fmt.Errorf("结果类型转换失败")
-	}
-
-	// 创建响应
-	resp := &transaction.BroadcastResponse{
-		Result: txid,
+		// 尝试将结果转换为字符串（txid）
+		txid, ok := result.Result.(string)
+		if !ok {
+			log.ErrorWithContext(ctx, "结果类型转换失败", "type", fmt.Sprintf("%T", result.Result))
+			return nil, http.StatusInternalServerError, fmt.Errorf("结果类型转换失败: 期望 string 或 *transaction.BroadcastResponse 类型")
+		}
+		// 如果是字符串，创建响应对象
+		resp = &transaction.BroadcastResponse{
+			Result: txid,
+		}
 	}
 
 	// 返回结果
-	log.InfoWithContext(ctx, "交易广播请求处理完成", "txid", txid)
+	log.InfoWithContext(ctx, "交易广播请求处理完成", "txid", resp.Result)
 	return resp, http.StatusOK, nil
 }
 
@@ -80,7 +83,17 @@ func DecodeRawTx(ctx context.Context, req *transaction.TxDecodeRawRequest) (*tra
 
 	// 如果直接转换失败，使用 mapstructure 进行高效转换
 	var resp transaction.TxDecodeResponse
-	if err := mapstructure.Decode(result.Result, &resp); err != nil {
+	config := &mapstructure.DecoderConfig{
+		WeaklyTypedInput: true,
+		Result:           &resp,
+	}
+	decoder, err := mapstructure.NewDecoder(config)
+	if err != nil {
+		log.ErrorWithContext(ctx, "创建解码器失败", "error", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("创建解码器失败: %w", err)
+	}
+
+	if err := decoder.Decode(result.Result); err != nil {
 		log.ErrorWithContext(ctx, "解码交易结果映射失败", "error", err)
 		return nil, http.StatusInternalServerError, fmt.Errorf("解码交易结果映射失败: %w", err)
 	}

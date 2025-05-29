@@ -165,7 +165,7 @@ func registerRoutes(r *gin.Engine) {
 	// 注册交易服务API
 	txService := transaction_service.NewTransactionService()
 	// 广播单笔原始交易
-	apiGroup.POST("/tx/raw", txService.BroadcastTxRaw)
+	apiGroup.POST("/tx/raw", txBroadcastService.BroadcastTxRaw)
 	// 解码原始交易
 	apiGroup.POST("/tx/raw/decode", txService.DecodeTxRaw)
 	// 获取交易原始十六进制数据

@@ -40,6 +40,7 @@ type TxsBroadcastResponse struct {
 
 // TxsBroadcastResult 批量交易广播结果
 type TxsBroadcastResult struct {
+	TxIDs   []string    `json:"txids,omitempty"`
 	Invalid []InvalidTx `json:"invalid,omitempty"`
 }
 

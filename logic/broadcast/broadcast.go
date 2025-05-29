@@ -2,6 +2,7 @@ package logic
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"ginproject/entity/broadcast"
@@ -34,17 +35,25 @@ func BroadcastTxRaw(ctx context.Context, req *broadcast.TxBroadcastRequest) (*br
 	// 转换结果
 	resp, ok := result.Result.(*broadcast.BroadcastResponse)
 	if !ok {
-		err := ctx.Err()
-		if err == nil {
-			err = ctx.Err() // 尝试获取上下文错误
+		// 尝试将结果转换为字符串（txid）
+		txid, ok := result.Result.(string)
+		if !ok {
+			err := ctx.Err()
+			if err == nil {
+				err = fmt.Errorf("结果类型转换失败: 期望 string 或 *broadcast.BroadcastResponse 类型")
+			}
+			log.ErrorWithContext(ctx, "结果类型转换失败", "type", fmt.Sprintf("%T", result.Result))
+			return nil, http.StatusInternalServerError, err
 		}
-		log.ErrorWithContext(ctx, "结果类型转换失败", "type", "BroadcastResponse")
-		return nil, http.StatusInternalServerError, err
+		// 如果是字符串，创建响应对象
+		resp = &broadcast.BroadcastResponse{
+			Result: txid,
+		}
 	}
 
 	// 返回结果
 	log.InfoWithContext(ctx, "交易广播请求处理完成",
-		"success", resp.Error == nil,
+		"success", true,
 		"result", resp.Result)
 
 	return resp, http.StatusOK, nil
@@ -85,12 +94,62 @@ func BroadcastTxsRaw(ctx context.Context, req broadcast.TxsBroadcastRequest) (*b
 	// 转换结果
 	resp, ok := result.Result.(*broadcast.TxsBroadcastResponse)
 	if !ok {
-		err := ctx.Err()
-		if err == nil {
-			err = ctx.Err() // 尝试获取上下文错误
+		// 尝试处理不同类型的结果
+		if mapResult, ok := result.Result.(map[string]interface{}); ok {
+			// 创建响应对象
+			resp = &broadcast.TxsBroadcastResponse{
+				Result: &broadcast.TxsBroadcastResult{
+					Invalid: []broadcast.InvalidTx{},
+				},
+			}
+
+			// 处理可能的错误信息
+			if errMap, ok := mapResult["error"].(map[string]interface{}); ok {
+				code, _ := errMap["code"].(float64)
+				message, _ := errMap["message"].(string)
+				resp.Error = &broadcast.BroadcastError{
+					Code:    int(code),
+					Message: message,
+				}
+			}
+
+			// 处理结果数据
+			if resultMap, ok := mapResult["result"].(map[string]interface{}); ok {
+				if invalidTxs, ok := resultMap["invalid"].([]interface{}); ok {
+					invalid := make([]broadcast.InvalidTx, 0, len(invalidTxs))
+					for _, inv := range invalidTxs {
+						if invMap, ok := inv.(map[string]interface{}); ok {
+							invalidTx := broadcast.InvalidTx{}
+							if txid, ok := invMap["txid"].(string); ok {
+								invalidTx.TxID = txid
+							}
+							if rejectCode, ok := invMap["reject_code"].(float64); ok {
+								invalidTx.RejectCode = int(rejectCode)
+							}
+							if rejectReason, ok := invMap["reject_reason"].(string); ok {
+								invalidTx.RejectReason = rejectReason
+							}
+							invalid = append(invalid, invalidTx)
+						}
+					}
+					resp.Result.Invalid = invalid
+				}
+			}
+		} else if _, ok := result.Result.(string); ok {
+			// 如果是字符串，创建响应对象
+			resp = &broadcast.TxsBroadcastResponse{
+				Result: &broadcast.TxsBroadcastResult{
+					Invalid: []broadcast.InvalidTx{},
+				},
+			}
+		} else {
+			err := ctx.Err()
+			if err == nil {
+				err = fmt.Errorf("结果类型转换失败: 期望 map、string 或 *broadcast.TxsBroadcastResponse 类型")
+			}
+			log.ErrorWithContext(ctx, "结果类型转换失败", "type", fmt.Sprintf("%T", result.Result))
+			return nil, http.StatusInternalServerError, err
 		}
-		log.ErrorWithContext(ctx, "结果类型转换失败", "type", "TxsBroadcastResponse")
-		return nil, http.StatusInternalServerError, err
 	}
 
 	// 如果有错误，返回对应的错误状态码
@@ -109,7 +168,7 @@ func BroadcastTxsRaw(ctx context.Context, req broadcast.TxsBroadcastRequest) (*b
 			"totalCount", len(req),
 			"invalidCount", invalidCount)
 	}
-
+	// fmt.Println(resp.Result.TxID)
 	// 返回结果
 	return resp, statusCode, nil
 }
