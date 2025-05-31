@@ -63,10 +63,50 @@ func SendRawTransactions(ctx context.Context, txList []map[string]interface{}) <
 		defer close(resultChan)
 
 		// 记录开始调用日志
-		log.InfoWithContext(ctx, "开始批量广播原始交易(完整响应)", "count", len(txList))
+		log.InfoWithContext(ctx, "开始批量广播原始交易", "count", len(txList))
+
+		// 如果只有一笔交易，尝试使用单笔交易广播
+		if len(txList) == 1 {
+			log.InfoWithContext(ctx, "只有一笔交易，尝试使用单笔交易广播")
+			tx := txList[0]
+			singleChan := SendRawTransaction(ctx, tx["hex"].(string),
+				tx["allowhighfees"].(bool),
+				tx["dontcheckfee"].(bool))
+			singleResult := <-singleChan
+
+			if singleResult.Error != nil {
+				log.ErrorWithContext(ctx, "单笔交易广播失败", "error", singleResult.Error)
+				resultChan <- AsyncResult{
+					Result: &broadcast.TxsBroadcastResponse{
+						Error: &broadcast.BroadcastError{
+							Code:    -1,
+							Message: singleResult.Error.Error(),
+						},
+					},
+					Error: nil,
+				}
+				return
+			}
+
+			// 处理单笔交易的结果
+			if txid, ok := singleResult.Result.(string); ok {
+				txsBroadcastResult := &broadcast.TxsBroadcastResult{
+					TxIDs:   []string{txid},
+					Invalid: []broadcast.InvalidTx{},
+				}
+				log.InfoWithContext(ctx, "单笔交易广播成功", "txid", txid)
+				resultChan <- AsyncResult{
+					Result: &broadcast.TxsBroadcastResponse{
+						Result: txsBroadcastResult,
+					},
+					Error: nil,
+				}
+				return
+			}
+		}
 
 		// 使用异步方式调用RPC
-		asyncChan := CallRPCAsync(ctx, "sendrawtransactions", []interface{}{txList}, true)
+		asyncChan := CallRPCAsync(ctx, "sendrawtransactions", []interface{}{txList}, false)
 		asyncResult := <-asyncChan
 
 		if asyncResult.Error != nil {
@@ -86,80 +126,97 @@ func SendRawTransactions(ctx context.Context, txList []map[string]interface{}) <
 		result := asyncResult.Result
 
 		// 解析完整响应
-		rpcResp, ok := result.(RPCResponse)
-		if !ok {
-			log.ErrorWithContext(ctx, "解析RPC响应失败", "result", result)
-			resultChan <- AsyncResult{
-				Result: &broadcast.TxsBroadcastResponse{
-					Error: &broadcast.BroadcastError{
-						Code:    -1,
-						Message: "解析RPC响应失败",
-					},
-				},
-				Error: nil,
-			}
-			return
-		}
-
-		// 处理错误情况
-		if rpcResp.Error != nil {
-			log.WarnWithContext(ctx, "批量广播交易返回错误",
-				"code", rpcResp.Error.Code,
-				"message", rpcResp.Error.Message)
-
-			resultChan <- AsyncResult{
-				Result: &broadcast.TxsBroadcastResponse{
-					Error: &broadcast.BroadcastError{
-						Code:    rpcResp.Error.Code,
-						Message: rpcResp.Error.Message,
-					},
-				},
-				Error: nil,
-			}
-			return
-		}
-
-		// 解析结果
 		var resultMap map[string]interface{}
-		resultBytes, ok := rpcResp.Result.([]byte)
-		if !ok {
-			// 尝试转换为json原始消息
-			rawMsg, ok := rpcResp.Result.(json.RawMessage)
-			if !ok {
-				log.ErrorWithContext(ctx, "解析批量广播结果失败", "result", fmt.Sprintf("%T", rpcResp.Result))
+
+		// 尝试直接转换为 map
+		if m, ok := result.(map[string]interface{}); ok {
+			resultMap = m
+			// 打印完整的结果结构
+			log.InfoWithContext(ctx, "批量广播返回结果", "result", resultMap)
+		} else {
+			// 尝试将结果转换为 json 并解析
+			resultBytes, err := json.Marshal(result)
+			if err != nil {
+				log.ErrorWithContext(ctx, "序列化批量广播结果失败", "error", err)
 				resultChan <- AsyncResult{
 					Result: &broadcast.TxsBroadcastResponse{
 						Error: &broadcast.BroadcastError{
 							Code:    -1,
-							Message: "解析批量广播结果失败: 无法转换结果类型",
+							Message: fmt.Sprintf("序列化批量广播结果失败: %v", err),
 						},
 					},
 					Error: nil,
 				}
 				return
 			}
-			resultBytes = []byte(rawMsg)
-		}
 
-		if err := json.Unmarshal(resultBytes, &resultMap); err != nil {
-			log.ErrorWithContext(ctx, "解析批量广播结果失败", "result", string(resultBytes))
-			resultChan <- AsyncResult{
-				Result: &broadcast.TxsBroadcastResponse{
-					Error: &broadcast.BroadcastError{
-						Code:    -1,
-						Message: "解析批量广播结果失败: " + err.Error(),
+			if err := json.Unmarshal(resultBytes, &resultMap); err != nil {
+				log.ErrorWithContext(ctx, "解析批量广播结果失败", "error", err)
+				resultChan <- AsyncResult{
+					Result: &broadcast.TxsBroadcastResponse{
+						Error: &broadcast.BroadcastError{
+							Code:    -1,
+							Message: fmt.Sprintf("解析批量广播结果失败: %v", err),
+						},
 					},
-				},
-				Error: nil,
+					Error: nil,
+				}
+				return
 			}
-			return
+			// 打印完整的结果结构
+			log.InfoWithContext(ctx, "批量广播返回结果(JSON解析后)", "result", resultMap)
 		}
 
 		// 处理无效交易列表
 		txsBroadcastResult := &broadcast.TxsBroadcastResult{
+			TxIDs:   make([]string, 0),
 			Invalid: []broadcast.InvalidTx{},
 		}
 
+		// 处理成功的交易ID列表
+		if result, exists := resultMap["result"]; exists && result != nil {
+			log.InfoWithContext(ctx, "处理 result 字段", "result", result)
+
+			if resultMap, ok := result.(map[string]interface{}); ok {
+				log.InfoWithContext(ctx, "result 是 map 类型", "resultMap", resultMap)
+
+				// 尝试从 result.txids 获取
+				if txids, exists := resultMap["txids"]; exists && txids != nil {
+					log.InfoWithContext(ctx, "找到 txids 字段", "txids", txids)
+					if txidArray, ok := txids.([]interface{}); ok {
+						for _, txid := range txidArray {
+							if txidStr, ok := txid.(string); ok {
+								txsBroadcastResult.TxIDs = append(txsBroadcastResult.TxIDs, txidStr)
+							}
+						}
+					}
+				} else if txid, exists := resultMap["txid"]; exists && txid != nil {
+					log.InfoWithContext(ctx, "找到 txid 字段", "txid", txid)
+					// 尝试从 result.txid 获取
+					if txidStr, ok := txid.(string); ok {
+						txsBroadcastResult.TxIDs = append(txsBroadcastResult.TxIDs, txidStr)
+					}
+				}
+			} else if txidArray, ok := result.([]interface{}); ok {
+				// 直接尝试将 result 作为交易ID数组处理
+				log.InfoWithContext(ctx, "result 是数组类型", "array", txidArray)
+				for _, txid := range txidArray {
+					if txidStr, ok := txid.(string); ok {
+						txsBroadcastResult.TxIDs = append(txsBroadcastResult.TxIDs, txidStr)
+					}
+				}
+			} else if txidStr, ok := result.(string); ok {
+				// 直接尝试将 result 作为单个交易ID处理
+				log.InfoWithContext(ctx, "result 是字符串类型", "txid", txidStr)
+				txsBroadcastResult.TxIDs = append(txsBroadcastResult.TxIDs, txidStr)
+			}
+		}
+
+		if len(txsBroadcastResult.TxIDs) == 0 {
+			log.WarnWithContext(ctx, "未找到任何成功的交易ID", "resultMap", resultMap)
+		}
+
+		// 处理无效交易列表
 		if invalidArray, exists := resultMap["invalid"]; exists && invalidArray != nil {
 			if invalidItems, ok := invalidArray.([]interface{}); ok {
 				for _, item := range invalidItems {
@@ -186,6 +243,8 @@ func SendRawTransactions(ctx context.Context, txList []map[string]interface{}) <
 
 		log.InfoWithContext(ctx, "成功批量广播原始交易",
 			"total", len(txList),
+			"success", len(txsBroadcastResult.TxIDs),
+			"txids", txsBroadcastResult.TxIDs,
 			"invalid", len(txsBroadcastResult.Invalid))
 
 		resultChan <- AsyncResult{

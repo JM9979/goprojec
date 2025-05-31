@@ -113,25 +113,11 @@ func (l *FtLogic) GetMultiFtBalanceByAddress(ctx context.Context, req *ft.FtBala
 	return responseList, nil
 }
 
-// GetTokensListHeldByAddress 获取地址持有的所有代币列表
-func (l *FtLogic) GetTokensListHeldByAddress(ctx context.Context, req *ft.TBC20TokenListHeldByAddressRequest) (*ft.TBC20TokenListHeldByAddressResponse, error) {
-	// 使用entity层的验证逻辑
-	if err := req.Validate(); err != nil {
-		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
-		return nil, fmt.Errorf("参数验证失败: %v", err)
-	}
+// getTokenListByCombineScript 获取代币列表的通用逻辑
+func (l *FtLogic) getTokenListByCombineScript(ctx context.Context, combineScript string) ([]ft.TokenInfo, error) {
+	
 
-	// 从请求对象中获取组合脚本
-	combineScript, err := req.GetCombineScript()
-	if err != nil {
-		log.ErrorWithContextf(ctx, "获取组合脚本失败: %v", err)
-		return nil, fmt.Errorf("获取组合脚本失败: %v", err)
-	}
-
-	// 添加00作为校验
-	combineScript += "00"
-
-	log.InfoWithContextf(ctx, "查询地址[%s]持有的代币列表, 组合脚本: %s", req.Address, combineScript)
+	log.InfoWithContextf(ctx, "通过合并脚本获取代币列表请求: 合并脚本=%s", combineScript)
 
 	// 获取该地址持有的所有代币合约ID
 	contractIds, err := l.ftTxoDAO.GetFtContractIdsByHolder(ctx, combineScript)
@@ -141,15 +127,11 @@ func (l *FtLogic) GetTokensListHeldByAddress(ctx context.Context, req *ft.TBC20T
 	}
 
 	if len(contractIds) == 0 {
-		log.InfoWithContextf(ctx, "地址[%s]未持有任何代币", req.Address)
-		return &ft.TBC20TokenListHeldByAddressResponse{
-			Address:    req.Address,
-			TokenCount: 0,
-			TokenList:  []ft.TokenInfo{},
-		}, nil
+		log.InfoWithContextf(ctx, "地址[%s]未持有任何代币", combineScript)
+		return []ft.TokenInfo{}, nil
 	}
 
-	log.InfoWithContextf(ctx, "地址[%s]持有的代币数量: %d", req.Address, len(contractIds))
+	log.InfoWithContextf(ctx, "地址[%s]持有的代币数量: %d", combineScript, len(contractIds))
 
 	// 初始化代币列表
 	tokenList := make([]ft.TokenInfo, 0, len(contractIds))
@@ -191,6 +173,53 @@ func (l *FtLogic) GetTokensListHeldByAddress(ctx context.Context, req *ft.TBC20T
 			FtSymbol:     token.FtSymbol,
 		}
 		tokenList = append(tokenList, tokenInfo)
+	}
+
+	return tokenList, nil
+}
+
+func (l *FtLogic) GetTokensListHeldByCombineScript(ctx context.Context, req *ft.TBC20TokenListHeldByCombineScriptRequest) (*ft.TBC20TokenListHeldByCombineScriptResponse, error) {
+	// 使用entity层的验证逻辑
+	if err := req.Validate(); err != nil {
+		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
+		return nil, fmt.Errorf("参数验证失败: %v", err)
+	}
+
+	tokenList, err := l.getTokenListByCombineScript(ctx, req.CombineScript)
+	if err != nil {
+		return nil, err
+	}
+
+	// 构造响应
+	response := &ft.TBC20TokenListHeldByCombineScriptResponse{
+		CombineScript: req.CombineScript,
+		TokenCount:    len(tokenList),
+		TokenList:     tokenList,
+	}
+
+	log.InfoWithContextf(ctx, "成功获取地址[%s]持有的代币列表，数量: %d", req.CombineScript, len(tokenList))
+	return response, nil
+}
+
+func (l *FtLogic) GetTokensListHeldByAddress(ctx context.Context, req *ft.TBC20TokenListHeldByAddressRequest) (*ft.TBC20TokenListHeldByAddressResponse, error) {
+	// 使用entity层的验证逻辑
+	if err := req.Validate(); err != nil {
+		log.ErrorWithContextf(ctx, "参数验证失败: %v", err)
+		return nil, fmt.Errorf("参数验证失败: %v", err)
+	}
+
+	// 从请求对象中获取组合脚本
+	combineScript, err := req.GetCombineScript()
+	if err != nil {
+		log.ErrorWithContextf(ctx, "获取组合脚本失败: %v", err)
+		return nil, fmt.Errorf("获取组合脚本失败: %v", err)
+	}
+	// 添加00作为校验
+	combineScript += "00"
+
+	tokenList, err := l.getTokenListByCombineScript(ctx, combineScript)
+	if err != nil {
+		return nil, err
 	}
 
 	// 构造响应
@@ -332,7 +361,7 @@ func (l *FtLogic) GetFtBalanceByCombineScript(ctx context.Context, req *ft.FtBal
 
 	log.InfoWithContextf(ctx, "通过RPC获取FT余额成功: %d", contractBalance)
 
-		// 构造响应
+	// 构造响应
 	response := &ft.FtBalanceCombineScriptResponse{
 		CombineScript: combineScript,
 		ContractHash:  req.ContractHash,

@@ -31,12 +31,16 @@ func (s *TxBroadcastService) BroadcastTxRaw(c *gin.Context) {
 		return
 	}
 
+	log.InfoWithContext(ctx, "广播单笔原始交易", "req", req)
+
 	// 调用业务逻辑层处理请求
 	resp, statusCode, err := logic.BroadcastTxRaw(ctx, &req)
 	if err != nil {
 		c.JSON(statusCode, gin.H{"error": err.Error()})
 		return
 	}
+
+	log.InfoWithContext(ctx, "广播单笔原始交易", "resp", resp)
 
 	// 返回结果
 	c.JSON(statusCode, resp)

@@ -68,6 +68,8 @@ func registerRoutes(r *gin.Engine) {
 	apiGroup.GET("/ft/history/address/:address/contract/:contract_id/page/:page/size/:size", ftService.GetFtHistoryByAddress)
 	// 添加获取代币列表的路由
 	apiGroup.GET("/ft/tokens/page/:page/size/:size/orderby/:order_by", ftService.GetFtTokenList)
+	// 添加通过合并脚本获取代币列表的路由
+	apiGroup.GET("/ft/tokens/held/by/combine/script/:combine_script", ftService.GetFtTokenListHeldByCombineScript)
 	// 添加解析FT交易历史的路由
 	apiGroup.GET("/ft/decode/tx/history/:txid", ftService.DecodeFtTransactionHistory)
 	// 添加获取代币相关流动池列表的路由
@@ -93,7 +95,9 @@ func registerRoutes(r *gin.Engine) {
 	// 添加获取地址历史交易的路由
 	apiGroup.GET("/address/:address/history", addressService.GetAddressHistory)
 	// 添加获取地址历史交易分页的路由
-	apiGroup.GET("/address/:address/history/page/:page", addressService.GetAddressHistoryPaged)
+	apiGroup.GET("/address/:address/history/page/:page", addressService.GetAddressHistoryPagedFromDB)
+	// 添加获取地址历史交易记录分页使用数据库查询的路由
+	apiGroup.GET("/address/:address/allhistory/page/:page", addressService.GetAddressHistoryPaged)
 	// 添加获取地址余额的路由
 	apiGroup.GET("/address/:address/get/balance", addressService.GetAddressBalance)
 	// 添加获取地址冻结余额的路由
@@ -161,7 +165,7 @@ func registerRoutes(r *gin.Engine) {
 	// 注册交易服务API
 	txService := transaction_service.NewTransactionService()
 	// 广播单笔原始交易
-	apiGroup.POST("/tx/raw", txService.BroadcastTxRaw)
+	apiGroup.POST("/tx/raw", txBroadcastService.BroadcastTxRaw)
 	// 解码原始交易
 	apiGroup.POST("/tx/raw/decode", txService.DecodeTxRaw)
 	// 获取交易原始十六进制数据
