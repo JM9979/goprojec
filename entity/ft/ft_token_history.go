@@ -35,8 +35,8 @@ func ValidateFtTokenHistoryRequest(req *FtTokenHistoryRequest) error {
 		return fmt.Errorf("页码不能小于0")
 	}
 
-	if req.Size <= 0 || req.Size > 100 {
-		return fmt.Errorf("每页数量必须在1到100之间")
+	if req.Size <= 0 || req.Size > 10000 {
+		return fmt.Errorf("每页数量必须在1到10000之间")
 	}
 
 	return nil

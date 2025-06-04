@@ -19,8 +19,8 @@ func (r *FtHistoryRequest) Validate() error {
 	if r.Page < 0 {
 		return NewValidationError("页码必须大于或等于0")
 	}
-	if r.Size < 1 || r.Size > 100 {
-		return NewValidationError("每页记录数必须在1到100之间")
+	if r.Size < 1 || r.Size > 10000 {
+		return NewValidationError("每页记录数必须在1到10000之间")
 	}
 	return nil
 }

@@ -76,8 +76,8 @@ func (s *NftService) GetCollectionsByAddress(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "页码不能为负数"})
 		return
 	}
-	if size <= 0 || size > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-100之间"})
+	if size <= 0 || size > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-10000之间"})
 		return
 	}
 
@@ -127,8 +127,8 @@ func (s *NftService) GetNftsByAddress(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "页码不能为负数"})
 		return
 	}
-	if size <= 0 || size > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-100之间"})
+	if size <= 0 || size > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-10000之间"})
 		return
 	}
 
@@ -171,8 +171,8 @@ func (s *NftService) GetNftsByScriptHash(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "页码不能为负数"})
 		return
 	}
-	if size <= 0 || size > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-100之间"})
+	if size <= 0 || size > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-10000之间"})
 		return
 	}
 
@@ -216,8 +216,8 @@ func (s *NftService) GetNftsByCollectionId(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "页码不能为负数"})
 		return
 	}
-	if size <= 0 || size > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-100之间"})
+	if size <= 0 || size > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-10000之间"})
 		return
 	}
 
@@ -260,8 +260,8 @@ func (s *NftService) GetNftHistory(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "页码不能为负数"})
 		return
 	}
-	if size <= 0 || size > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-100之间"})
+	if size <= 0 || size > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-10000之间"})
 		return
 	}
 
@@ -299,8 +299,8 @@ func (s *NftService) GetAllCollections(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "页码不能为负数"})
 		return
 	}
-	if size <= 0 || size > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-100之间"})
+	if size <= 0 || size > 10000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "每页记录数必须在1-10000之间"})
 		return
 	}
 

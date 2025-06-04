@@ -46,7 +46,7 @@ func (r *NftHistoryRequest) Validate() error {
 	if r.Page < 0 {
 		return ErrInvalidPage
 	}
-	if r.Size <= 0 || r.Size > 100 {
+	if r.Size <= 0 || r.Size > 10000 {
 		return ErrInvalidSize
 	}
 	return nil
@@ -60,7 +60,7 @@ func ValidateNftHistory(address string, page, size int) error {
 	if page < 0 {
 		return ErrInvalidPage
 	}
-	if size <= 0 || size > 100 {
+	if size <= 0 || size > 10000 {
 		return ErrInvalidSize
 	}
 	return nil
@@ -70,7 +70,7 @@ func ValidateNftHistory(address string, page, size int) error {
 var (
 	ErrEmptyAddress = NewNftError(10001, "地址不能为空")
 	ErrInvalidPage  = NewNftError(10002, "页码不能为负数")
-	ErrInvalidSize  = NewNftError(10003, "每页记录数必须在1-100之间")
+	ErrInvalidSize  = NewNftError(10003, "每页记录数必须在1-10000之间")
 )
 
 // NftError 表示NFT操作相关的错误

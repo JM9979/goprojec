@@ -28,8 +28,8 @@ func (req *FtHolderRankRequest) Validate() error {
 	}
 
 	// 检查每页记录数是否合法
-	if req.Size <= 0 || req.Size > 100 {
-		return fmt.Errorf("每页记录数必须在1-100之间")
+	if req.Size <= 0 || req.Size > 10000 {
+		return fmt.Errorf("每页记录数必须在1-10000之间")
 	}
 
 	return nil

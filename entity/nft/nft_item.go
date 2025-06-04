@@ -102,13 +102,13 @@ type DetailCollectionInfoRequest struct {
 
 // 常量定义
 const (
-	MaxPageSize = 100
+	MaxPageSize = 10000
 )
 
 // 错误定义
 var (
 	ErrEmptyContractList = NewNftError(10008, "合约ID列表不能为空")
-	ErrTooManyContracts  = NewNftError(10009, "合约ID列表不能超过100个")
+	ErrTooManyContracts  = NewNftError(10009, "合约ID列表不能超过10000个")
 )
 
 // 验证方法
@@ -239,7 +239,7 @@ func (r *NftsByContractIdsRequest) Validate() error {
 		return NewNftError(10006, "合约ID列表不能为空")
 	}
 	if len(r.ContractList) > MaxPageSize {
-		return NewNftError(10007, "合约ID列表不能超过100个")
+		return NewNftError(10007, "合约ID列表不能超过10000个")
 	}
 	return nil
 }

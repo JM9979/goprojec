@@ -55,7 +55,7 @@ type GetDetailCollectionInfoRequest struct {
 var (
 	ErrEmptyCollectionAddress = NewNftError(20001, "集合查询地址不能为空")
 	ErrInvalidCollectionPage  = NewNftError(20002, "集合查询页码不能为负数")
-	ErrInvalidCollectionSize  = NewNftError(20003, "集合查询每页大小必须在1-100之间")
+	ErrInvalidCollectionSize  = NewNftError(20003, "集合查询每页大小必须在1-10000之间")
 	ErrEmptyCollectionId      = NewNftError(20004, "集合ID不能为空")
 )
 
@@ -72,7 +72,7 @@ func ValidateCollectionQueryByAddress(address string, page, size int) error {
 	}
 
 	// 验证每页大小
-	if size <= 0 || size > 100 {
+	if size <= 0 || size > 10000 {
 		return ErrInvalidCollectionSize
 	}
 
@@ -87,7 +87,7 @@ func ValidateCollectionsPageSize(page, size int) error {
 	}
 
 	// 验证每页大小
-	if size <= 0 || size > 100 {
+	if size <= 0 || size > 10000 {
 		return ErrInvalidCollectionSize
 	}
 

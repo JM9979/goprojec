@@ -54,8 +54,8 @@ func (req *TBC20PoolPageRequest) Validate() error {
 	}
 
 	// 检查每页大小是否合法
-	if req.Size <= 0 || req.Size > 100 {
-		return fmt.Errorf("每页大小必须在1到100之间")
+	if req.Size <= 0 || req.Size > 10000 {
+		return fmt.Errorf("每页大小必须在1到10000之间")
 	}
 
 	return nil

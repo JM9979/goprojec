@@ -77,8 +77,8 @@ func (r TxsBroadcastRequest) Validate() error {
 		return fmt.Errorf("交易列表不能为空")
 	}
 
-	if len(r) > 100 {
-		return fmt.Errorf("批量交易数量不能超过100个")
+	if len(r) > 10000 {
+		return fmt.Errorf("批量交易数量不能超过10000个")
 	}
 
 	for i, tx := range r {
